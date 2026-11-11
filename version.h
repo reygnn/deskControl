@@ -1,0 +1,6 @@
+#ifndef DESKCONTROL_VERSION_H
+#define DESKCONTROL_VERSION_H
+
+#define DESKCONTROL_VERSION "0.1.0"
+
+#endif

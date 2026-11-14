@@ -4,7 +4,7 @@
  *
  * libwayland, xkbcommon, Pango and Cairo, one file, no toolkit. It speaks
  * ext-workspace-v1, so it works with any compositor that offers it: one button per
- * workspace, in their order, two to a row. The current one is pushed in, in the
+ * workspace, in their order, in two rows. The current one is pushed in, in the
  * active colour; one with a window that wants attention is marked. It follows when
  * something else switches. It reads the same colours as mwc: MWC_INACTIVE /
  * MWC_ACTIVE from the environment, else Mwm*background and Mwm*activeBackground
@@ -51,7 +51,7 @@
 #define PAD 6
 #define GAP 4           /* between two buttons */
 #define FRAME (BEV + 1) /* mwm's border without resize handles, as mwc draws it */
-#define COLS 2          /* buttons in a row */
+#define ROWS 2          /* mwc has an even number of desktops */
 #define MAX_WS 32
 #ifndef MAX            /* glib has them too */
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -405,15 +405,16 @@ static void text_centred(uint32_t c, struct rect r, int off, const char *s)
 	pango_layout_set_ellipsize(plo, PANGO_ELLIPSIZE_NONE);
 }
 
-/* COLS buttons to a row, 1 2 over 3 4, all as wide as the widest name needs and at
- * least a square and a half, inside the frame. */
+/* Two rows, 1 2 over 3 4, 1 2 3 over 4 5 6: always two buttons high, as high as
+ * pulseControl and digitalClock beside it. All as wide as the widest name needs and
+ * at least a square and a half, inside the frame. */
 static void layout(void)
 {
 	btn_w = barh * 3 / 2;
 	for (int i = 0; i < n_ws; i++)
 		btn_w = MAX(btn_w, textw(wss[i]->name) + 2 * BEV + 2 * PAD);
 	int n = MAX(n_ws, 1);
-	int cols = MIN(n, COLS), rows = (n + COLS - 1) / COLS;
+	int rows = MIN(n, ROWS), cols = (n + ROWS - 1) / ROWS;
 	int want_w = 2 * (FRAME + PAD) + cols * btn_w + (cols - 1) * GAP;
 	int want_h = 2 * (FRAME + PAD) + rows * barh + (rows - 1) * GAP;
 	if (want_w != sized_w || want_h != sized_h) {
@@ -429,8 +430,8 @@ static void layout(void)
 	H = want_h;
 	for (int i = 0; i < n_ws; i++)
 		wss[i]->r = (struct rect){
-			FRAME + PAD + i % COLS * (btn_w + GAP),
-			FRAME + PAD + i / COLS * (barh + GAP), btn_w, barh };
+			FRAME + PAD + i % cols * (btn_w + GAP),
+			FRAME + PAD + i / cols * (barh + GAP), btn_w, barh };
 }
 
 /* mwm's thin border: a raised bevel and one line of the face inside it. */

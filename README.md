@@ -6,8 +6,9 @@ mit denselben Farben wie [mwc](https://github.com/reygnn/mwc): `MWC_INACTIVE` /
 `MWC_ACTIVE` aus der Umgebung, sonst `Mwm*background` / `Mwm*activeBackground` aus
 `~/.config/mwc/mwmrc`.
 
-deskControl zeigt einen Knopf pro Desktop, in ihrer Reihenfolge, zwei pro Reihe: 1 2
-über 3 4. Der aktuelle ist eingedrückt, in der Aktiv-Farbe. Ein Desktop, auf dem ein
+deskControl zeigt einen Knopf pro Desktop, in ihrer Reihenfolge, in zwei Reihen:
+1 2 über 3 4, 1 2 3 über 4 5 6. So ist es immer zwei Knöpfe hoch, wie pulseControl
+daneben. Der aktuelle ist eingedrückt, in der Aktiv-Farbe. Ein Desktop, auf dem ein
 Fenster Aufmerksamkeit will, ist bernsteinfarben markiert, bis man hinwechselt oder das
 Fenster zugeht. Schaltet ein anderes Programm um, zieht deskControl nach.
 

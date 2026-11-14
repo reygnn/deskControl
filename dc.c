@@ -4,11 +4,15 @@
  *
  * libwayland, xkbcommon, Pango and Cairo, one file, no toolkit. It speaks
  * ext-workspace-v1, so it works with any compositor that offers it: one button per
- * workspace, in their order. The current one is pushed in, in the active colour;
- * one with a window that wants attention is marked. It follows when something else
- * switches. It reads the same colours as mwc: MWC_INACTIVE / MWC_ACTIVE from the
- * environment, else Mwm*background and Mwm*activeBackground from
- * ~/.config/mwc/mwmrc, else the Motif defaults.
+ * workspace, in their order, two to a row. The current one is pushed in, in the
+ * active colour; one with a window that wants attention is marked. It follows when
+ * something else switches. It reads the same colours as mwc: MWC_INACTIVE /
+ * MWC_ACTIVE from the environment, else Mwm*background and Mwm*activeBackground
+ * from ~/.config/mwc/mwmrc, else the Motif defaults.
+ *
+ * It asks for no server-side decoration and draws its own frame: only mwm's thin
+ * border, no title bar, no buttons, no resize handles. The border takes the active
+ * colour while it has the keyboard, as mwc's frames do.
  *
  * Keys:   1 to 9        that desktop
  *         Left / Right  the one before or after, also Up / Down
@@ -41,12 +45,13 @@
 
 #include "ext-workspace-v1-client-protocol.h"
 #include "version.h"
-#include "xdg-decoration-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
 #define BEV 2           /* bevel width, as in mwm */
 #define PAD 6
 #define GAP 4           /* between two buttons */
+#define FRAME (BEV + 1) /* mwm's border without resize handles, as mwc draws it */
+#define COLS 2          /* buttons in a row */
 #define MAX_WS 32
 #ifndef MAX            /* glib has them too */
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -93,7 +98,6 @@ static struct wl_compositor *compositor;
 static struct wl_shm *shm;
 static struct wl_seat *seat;
 static struct xdg_wm_base *wm_base;
-static struct zxdg_decoration_manager_v1 *deco_mgr;
 static struct wl_surface *surface;
 static struct wl_callback *frame;       /* a frame is on its way */
 static struct shmbuf *bufs[2];
@@ -115,7 +119,8 @@ static struct xkb_context *xkb;
 static struct xkb_keymap *kb_map;
 static struct xkb_state *kb_state;
 
-static int W, H, btn_w, sized_w;
+static int W, H, btn_w, sized_w, sized_h;
+static int focused;             /* it has the keyboard: the active frame */
 static uint32_t px_bg, px_top, px_bot, px_sel, px_urgent;
 static uint32_t xc_fg, xc_dim, xc_err;
 static cairo_t *cr;             /* what fill, bevel and text draw on */
@@ -341,7 +346,6 @@ static void theme_init(void)
 	pango_font_metrics_unref(m);
 	pango_font_description_free(desc);
 	barh = font_asc + font_desc + 10;
-	H = 2 * PAD + barh;
 }
 
 /* ---- drawing ------------------------------------------------------------ */
@@ -361,16 +365,19 @@ static void fill(uint32_t px, int x, int y, int w, int h)
 	cairo_fill(cr);
 }
 
-static void bevel(struct rect r, int raised)
+static void bevel_in(struct rect r, uint32_t t, uint32_t b)
 {
-	uint32_t t = raised ? px_top : px_bot;
-	uint32_t b = raised ? px_bot : px_top;
 	for (int i = 0; i < BEV; i++) {
 		fill(t, r.x + i, r.y + i, r.w - 2 * i, 1);
 		fill(t, r.x + i, r.y + i, 1, r.h - 2 * i);
 		fill(b, r.x + i + 1, r.y + r.h - 1 - i, r.w - 2 * i - 1, 1);
 		fill(b, r.x + r.w - 1 - i, r.y + i + 1, 1, r.h - 2 * i - 1);
 	}
+}
+
+static void bevel(struct rect r, int raised)
+{
+	bevel_in(r, raised ? px_top : px_bot, raised ? px_bot : px_top);
 }
 
 static int textw(const char *s)
@@ -398,33 +405,53 @@ static void text_centred(uint32_t c, struct rect r, int off, const char *s)
 	pango_layout_set_ellipsize(plo, PANGO_ELLIPSIZE_NONE);
 }
 
-/* All buttons as wide as the widest name needs, and at least a square and a half. */
+/* COLS buttons to a row, 1 2 over 3 4, all as wide as the widest name needs and at
+ * least a square and a half, inside the frame. */
 static void layout(void)
 {
 	btn_w = barh * 3 / 2;
 	for (int i = 0; i < n_ws; i++)
 		btn_w = MAX(btn_w, textw(wss[i]->name) + 2 * BEV + 2 * PAD);
 	int n = MAX(n_ws, 1);
-	int want = 2 * PAD + n * btn_w + (n - 1) * GAP;
-	if (want != sized_w) {
+	int cols = MIN(n, COLS), rows = (n + COLS - 1) / COLS;
+	int want_w = 2 * (FRAME + PAD) + cols * btn_w + (cols - 1) * GAP;
+	int want_h = 2 * (FRAME + PAD) + rows * barh + (rows - 1) * GAP;
+	if (want_w != sized_w || want_h != sized_h) {
 		/* Its size is the buttons': the window can't be made larger or smaller. */
-		sized_w = want;
+		sized_w = want_w;
+		sized_h = want_h;
 		if (toplevel) {
-			xdg_toplevel_set_min_size(toplevel, want, H);
-			xdg_toplevel_set_max_size(toplevel, want, H);
+			xdg_toplevel_set_min_size(toplevel, want_w, want_h);
+			xdg_toplevel_set_max_size(toplevel, want_w, want_h);
 		}
 	}
-	W = want;
+	W = want_w;
+	H = want_h;
 	for (int i = 0; i < n_ws; i++)
-		wss[i]->r = (struct rect){ PAD + i * (btn_w + GAP), PAD, btn_w, barh };
+		wss[i]->r = (struct rect){
+			FRAME + PAD + i % COLS * (btn_w + GAP),
+			FRAME + PAD + i / COLS * (barh + GAP), btn_w, barh };
+}
+
+/* mwm's thin border: a raised bevel and one line of the face inside it. */
+static void draw_frame(void)
+{
+	uint32_t face = focused ? px_sel : px_bg;
+	fill(face, 0, 0, W, FRAME);
+	fill(face, 0, H - FRAME, W, FRAME);
+	fill(face, 0, 0, FRAME, H);
+	fill(face, W - FRAME, 0, FRAME, H);
+	bevel_in((struct rect){ 0, 0, W, H }, mix(face, 0xffffff, 0.55f),
+		mix(face, 0x000000, 0.5f));
 }
 
 static void paint(void)
 {
 	layout();
 	fill(px_bg, 0, 0, W, H);
+	draw_frame();
 	if (!n_ws) {
-		struct rect all = { 0, 0, W, H };
+		struct rect all = { FRAME, FRAME, W - 2 * FRAME, H - 2 * FRAME };
 		text_centred(have_list ? xc_err : xc_dim, all, 0,
 			have_list ? "no desktops" : "...");
 		return;
@@ -736,11 +763,15 @@ static void kb_keymap(void *data, struct wl_keyboard *k, uint32_t format,
 static void kb_enter(void *data, struct wl_keyboard *k, uint32_t serial,
 	struct wl_surface *s, struct wl_array *keys)
 {
+	focused = 1;
+	dirty = 1;
 }
 
 static void kb_leave(void *data, struct wl_keyboard *k, uint32_t serial,
 	struct wl_surface *s)
 {
+	focused = 0;
+	dirty = 1;
 }
 
 /* No repeat: holding Right walks to the end at once otherwise. */
@@ -942,9 +973,6 @@ static void registry_global(void *data, struct wl_registry *r, uint32_t name,
 		wm_base = wl_registry_bind(r, name, &xdg_wm_base_interface,
 			MIN(ver, 2));
 		xdg_wm_base_add_listener(wm_base, &wm_base_listener, NULL);
-	} else if (!strcmp(iface, zxdg_decoration_manager_v1_interface.name)) {
-		deco_mgr = wl_registry_bind(r, name,
-			&zxdg_decoration_manager_v1_interface, 1);
 	} else if (!strcmp(iface, ext_workspace_manager_v1_interface.name) && !ws_mgr) {
 		ws_mgr = wl_registry_bind(r, name, &ext_workspace_manager_v1_interface, 1);
 		ext_workspace_manager_v1_add_listener(ws_mgr, &mgr_listener, NULL);
@@ -1015,15 +1043,9 @@ static void setup_window(void)
 	xdg_toplevel_add_listener(toplevel, &toplevel_listener, NULL);
 	xdg_toplevel_set_app_id(toplevel, "deskControl");
 	xdg_toplevel_set_title(toplevel, "deskControl");
-	sized_w = 0;
+	sized_w = sized_h = 0;
 	layout();
-	if (deco_mgr) {
-		struct zxdg_toplevel_decoration_v1 *d =
-			zxdg_decoration_manager_v1_get_toplevel_decoration(deco_mgr,
-				toplevel);
-		zxdg_toplevel_decoration_v1_set_mode(d,
-			ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
-	}
+	/* No xdg-decoration: a compositor that offers it would add a title bar. */
 }
 
 /* ---- main loop ---------------------------------------------------------- */

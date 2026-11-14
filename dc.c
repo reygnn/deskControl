@@ -937,6 +937,9 @@ static void seat_capabilities(void *data, struct wl_seat *s, uint32_t caps)
 	} else if (!want_kb && keyboard) {
 		wl_keyboard_release(keyboard);
 		keyboard = NULL;
+		/* Gone without a leave, perhaps: the frame goes inactive all the same. */
+		focused = 0;
+		dirty = 1;
 	}
 }
 
@@ -1082,7 +1085,8 @@ int main(int argc, char **argv)
 	}
 	struct wl_registry *registry = wl_display_get_registry(dpy);
 	wl_registry_add_listener(registry, &registry_listener, NULL);
-	wl_display_roundtrip(dpy);
+	if (wl_display_roundtrip(dpy) < 0)
+		lost_connection();
 	if (!compositor || !shm || !wm_base) {
 		fprintf(stderr, "deskControl: the compositor lacks wl_compositor, wl_shm "
 			"or xdg_wm_base\n");
@@ -1094,7 +1098,8 @@ int main(int argc, char **argv)
 		return 1;
 	}
 	/* The workspaces first, so the window opens at its size. */
-	wl_display_roundtrip(dpy);
+	if (wl_display_roundtrip(dpy) < 0)
+		lost_connection();
 	cursor_init();
 	theme_init();
 	setup_window();
@@ -1113,11 +1118,14 @@ int main(int argc, char **argv)
 			continue;       /* events arrived in the meantime */
 		struct pollfd pfd = { wl_display_get_fd(dpy), POLLIN, 0 };
 		if (wl_display_flush(dpy) < 0) {
-			if (errno != EAGAIN) {
+			/* EPIPE: the compositor has closed, but may have said why first.
+			 * Reading that error makes libwayland report it. */
+			if (errno != EAGAIN && errno != EPIPE) {
 				wl_display_cancel_read(dpy);
 				lost_connection();
 			}
-			pfd.events |= POLLOUT;
+			if (errno == EAGAIN)
+				pfd.events |= POLLOUT;
 		}
 		if (poll(&pfd, 1, -1) < 0 && errno != EINTR) {
 			wl_display_cancel_read(dpy);

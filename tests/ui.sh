@@ -45,6 +45,7 @@ PID_dc=$!
 check "deskControl is mapped" "[ -n \"\$(get deskControl x)\" ]"
 sleep 0.3
 refresh
+KB_AT_MAP=$(get deskControl kbfocus)
 
 # Only its own thin frame: mwc adds no border and no title bar.
 [ "$(get deskControl bw)" = 0 ] && [ "$(get deskControl th)" = 0 ] ||
@@ -83,6 +84,24 @@ current_is() { # description n
 	check "$1" "[ \"\$(global desktop current)\" = $2 ] && [ \"\$(get deskControl visible)\" = 1 ]"
 }
 
+# Its frame: a bevel of 2, then a line of the face, active while it has the keyboard.
+frame_is() { # description rrggbb
+	local got= i
+	for ((i = 0; i < 30; i++)); do
+		WAYLAND_DISPLAY=wayland-0 grim "$SHOT" 2>/dev/null &&
+			got=$(build/pngtool pixel "$SHOT" $((X0 + 2)) "$(cy 1)")
+		[ "$got" = "$2" ] && { echo "ok: $1"; return 0; }
+		sleep 0.1
+	done
+	cp "$SHOT" "$ERR_SHOT" 2>/dev/null
+	fail "$1: the frame is $got, expected $2 (screenshot in $ERR_SHOT)"
+}
+if [ "$KB_AT_MAP" = 1 ]; then
+	frame_is "mapped with the keyboard, the frame is active" $SEL
+else
+	frame_is "mapped without the keyboard, the frame is inactive" $BG
+fi
+
 face_is "desktop 1 is shown as the current one" 1 $SEL
 face_is "the others are not" 3 $BG
 
@@ -109,15 +128,21 @@ current_is "and up to the one before" 2
 # ---- the keyboard ---------------------------------------------------------------------
 
 check "deskControl has the focus" "[ \"\$(get deskControl kbfocus)\" = 1 ]"
-# Its frame: a bevel of 2, then a line of the face, active while it has the keyboard.
-for ((i = 0; i < 30; i++)); do
-	WAYLAND_DISPLAY=wayland-0 grim "$SHOT" 2>/dev/null &&
-		got=$(build/pngtool pixel "$SHOT" $((X0 + 2)) "$(cy 1)")
-	[ "$got" = $SEL ] && break
-	sleep 0.1
-done
-[ "$got" = $SEL ] || { cp "$SHOT" "$ERR_SHOT"; fail "its frame is $got, expected $SEL"; }
-echo "ok: the frame is in the active colour"
+frame_is "the frame is in the active colour" $SEL
+# Another window takes the keyboard: the frame goes back; a click gives it again.
+WAYLAND_DISPLAY=wayland-0 build/xdgc app=thief size=200x100 >"$SMOKE_DIR/thief.log" 2>&1 &
+PID_thief=$!
+check "another window takes the keyboard" \
+	"[ \"\$(get thief kbfocus)\" = 1 ] && [ \"\$(get deskControl kbfocus)\" = 0 ]"
+frame_is "the frame is inactive again" $BG
+do_input move "$(cx 2)" "$(cy 2)"
+do_input click left
+check "a click gives deskControl the keyboard back" \
+	"[ \"\$(get deskControl kbfocus)\" = 1 ]"
+frame_is "and the frame is active again" $SEL
+current_is "clicking the current desktop changes nothing" 2
+kill "$PID_thief" 2>/dev/null
+wait "$PID_thief" 2>/dev/null
 do_input key 4
 current_is "4 goes to desktop 4" 4
 do_input key Right

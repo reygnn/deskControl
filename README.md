@@ -63,8 +63,9 @@ the keyboard. The colours are mwc's, see Configuration.
 | Home, End | the first, the last one |
 | Esc, q, Ctrl+Q, Ctrl+W | quit |
 
-A button acts on the release: a press dragged off the button does nothing. With Alt,
-Super or Ctrl held no key acts, except Ctrl+Q and Ctrl+W. Keys do not repeat.
+A button acts on the release: a press dragged off the button does nothing, dragged back
+it counts again. With Alt, Super or Ctrl held no key acts, except Ctrl+Q and Ctrl+W.
+Keys do not repeat. Desktops the compositor marks hidden get no button.
 
 
 ## Configuration

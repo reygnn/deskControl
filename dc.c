@@ -74,10 +74,11 @@ struct ws {
 };
 
 static struct ext_workspace_manager_v1 *ws_mgr;
-static struct ws *wss[MAX_WS];  /* in the order of the buttons */
-static int n_ws, ws_seq;
+static struct ws *all_ws[MAX_WS];       /* as they came, hidden ones too */
+static struct ws *wss[MAX_WS];  /* the shown ones, in the order of the buttons */
+static int n_all, n_ws, ws_seq;
 static int have_list;           /* the first done has come */
-static int pressed = -1;        /* the button the left button went down on */
+static struct ws *armed;        /* the desktop the left button went down on */
 static int dirty = 1;
 
 /* ---- Wayland ------------------------------------------------------------ */
@@ -259,14 +260,15 @@ static int parse_color(const char *s, uint32_t *out)
 		uint32_t rgb = 0;
 		s += 4;
 		for (int i = 0; i < 3; i++) {
-			char *end;
-			unsigned long v = strtoul(s, &end, 16);
-			int digits = end - s;
-			if (digits < 1 || digits > 4 || *end != (i < 2 ? '/' : '\0'))
+			/* Only hex digits, as in mwc: strtoul alone also takes spaces,
+			 * signs and 0x. */
+			int digits = strspn(s, "0123456789abcdefABCDEF");
+			if (digits < 1 || digits > 4 || s[digits] != (i < 2 ? '/' : '\0'))
 				return 0;
+			unsigned long v = strtoul(s, NULL, 16);
 			unsigned long max = (1ul << (4 * digits)) - 1;
 			rgb = rgb << 8 | (v * 255 + max / 2) / max;
-			s = end + 1;
+			s += digits + 1;
 		}
 		*out = rgb;
 		return 1;
@@ -468,6 +470,11 @@ static void draw_frame(void)
 		mix(face, 0x000000, 0.5f));
 }
 
+static int in(struct rect r, int x, int y)
+{
+	return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+}
+
 static void paint(void)
 {
 	layout();
@@ -484,15 +491,15 @@ static void paint(void)
 		int active = w->state & EXT_WORKSPACE_HANDLE_V1_STATE_ACTIVE;
 		int urgent = w->state & EXT_WORKSPACE_HANDLE_V1_STATE_URGENT;
 		/* Pushed in while it is current, and while the mouse holds it. */
-		int in = active || pressed == i;
+		int down = active || (w == armed && in(w->r, ptr_x, ptr_y));
 		uint32_t face = active ? px_sel : urgent ? px_urgent : px_bg;
 		fill(face, w->r.x + BEV, w->r.y + BEV, w->r.w - 2 * BEV, w->r.h - 2 * BEV);
-		bevel(w->r, !in);
+		bevel(w->r, !down);
 		uint32_t ink = contrast(face);
 		if (!(w->caps & EXT_WORKSPACE_HANDLE_V1_WORKSPACE_CAPABILITIES_ACTIVATE) &&
 		    !active)
 			ink = xc_dim; /* can't be switched to */
-		text_centred(ink, w->r, in ? 1 : 0, w->name);
+		text_centred(ink, w->r, down ? 1 : 0, w->name);
 	}
 }
 
@@ -599,6 +606,13 @@ static void ws_capabilities(void *data, struct ext_workspace_handle_v1 *h,
 static void ws_removed(void *data, struct ext_workspace_handle_v1 *h)
 {
 	struct ws *w = data;
+	for (int i = 0; i < n_all; i++) {
+		if (all_ws[i] == w) {
+			memmove(all_ws + i, all_ws + i + 1, (n_all - i - 1) * sizeof *all_ws);
+			n_all--;
+			break;
+		}
+	}
 	for (int i = 0; i < n_ws; i++) {
 		if (wss[i] == w) {
 			memmove(wss + i, wss + i + 1, (n_ws - i - 1) * sizeof *wss);
@@ -606,7 +620,8 @@ static void ws_removed(void *data, struct ext_workspace_handle_v1 *h)
 			break;
 		}
 	}
-	pressed = -1;
+	if (armed == w)
+		armed = NULL;
 	ext_workspace_handle_v1_destroy(h);
 	free(w);
 }
@@ -669,21 +684,26 @@ static void mgr_group(void *data, struct ext_workspace_manager_v1 *m,
 static void mgr_workspace(void *data, struct ext_workspace_manager_v1 *m,
 	struct ext_workspace_handle_v1 *h)
 {
-	struct ws *w = n_ws < MAX_WS ? calloc(1, sizeof *w) : NULL;
+	struct ws *w = n_all < MAX_WS ? calloc(1, sizeof *w) : NULL;
 	if (!w) {
 		ext_workspace_handle_v1_destroy(h);
 		return;
 	}
 	w->handle = h;
 	w->seq = ws_seq++;
-	snprintf(w->name, sizeof w->name, "%d", n_ws + 1);
-	wss[n_ws++] = w;
+	snprintf(w->name, sizeof w->name, "%d", n_all + 1);
+	all_ws[n_all++] = w;
 	ext_workspace_handle_v1_add_listener(h, &ws_listener, w);
 }
 
 /* Everything since the last one belongs together: now it is shown. */
 static void mgr_done(void *data, struct ext_workspace_manager_v1 *m)
 {
+	/* The spec: hidden ones should not be shown. */
+	n_ws = 0;
+	for (int i = 0; i < n_all; i++)
+		if (!(all_ws[i]->state & EXT_WORKSPACE_HANDLE_V1_STATE_HIDDEN))
+			wss[n_ws++] = all_ws[i];
 	qsort(wss, n_ws, sizeof *wss, by_place);
 	have_list = 1;
 	dirty = 1;
@@ -703,11 +723,6 @@ static const struct ext_workspace_manager_v1_listener mgr_listener = {
 };
 
 /* ---- input -------------------------------------------------------------- */
-
-static int in(struct rect r, int x, int y)
-{
-	return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
-}
 
 static int button_at(int x, int y)
 {
@@ -849,10 +864,17 @@ static void ptr_enter(void *data, struct wl_pointer *p, uint32_t serial,
 
 static void unpress(void)
 {
-	if (pressed >= 0) {
-		pressed = -1;
+	if (armed) {
+		armed = NULL;
 		dirty = 1;
 	}
+}
+
+/* The pointer is over the desktop the press went down on. */
+static int on_armed(int x, int y)
+{
+	int at = button_at(x, y);
+	return armed && at >= 0 && wss[at] == armed;
 }
 
 static void ptr_leave(void *data, struct wl_pointer *p, uint32_t serial,
@@ -866,10 +888,11 @@ static void ptr_leave(void *data, struct wl_pointer *p, uint32_t serial,
 static void ptr_motion(void *data, struct wl_pointer *p, uint32_t time,
 	wl_fixed_t x, wl_fixed_t y)
 {
+	int was = on_armed(ptr_x, ptr_y);
 	ptr_x = wl_fixed_to_int(x);
 	ptr_y = wl_fixed_to_int(y);
-	if (pressed >= 0 && button_at(ptr_x, ptr_y) != pressed)
-		unpress();
+	if (on_armed(ptr_x, ptr_y) != was)
+		dirty = 1;
 }
 
 /* A click counts on the release, over the button it went down on. */
@@ -880,13 +903,14 @@ static void ptr_button(void *data, struct wl_pointer *p, uint32_t serial,
 		return;
 	int at = button_at(ptr_x, ptr_y);
 	if (state == WL_POINTER_BUTTON_STATE_PRESSED) {
-		pressed = read_only() ? -1 : at;
+		armed = read_only() || at < 0 ? NULL : wss[at];
 		dirty = 1;
 		return;
 	}
-	int was = pressed;
+	/* A pointer, not an index: the list may have been re-sorted meanwhile. */
+	int take = on_armed(ptr_x, ptr_y);
 	unpress();
-	if (was >= 0 && was == at)
+	if (take)
 		activate(at);
 }
 
@@ -928,7 +952,7 @@ static void ptr_frame(void *data, struct wl_pointer *p)
 		axis_acc -= steps * AXIS_STEP;
 	}
 	axis_steps = 0;
-	if (steps && pressed < 0)
+	if (steps && !armed)
 		step(steps > 0 ? 1 : -1);
 }
 

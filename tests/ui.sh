@@ -138,6 +138,16 @@ do_input move "$(cx 3)" $((Y0 + CH + 40))
 do_input up left
 sleep 0.3
 current_is "pressed and dragged off, nothing changes" 2
+# Dragged back onto it, the press counts again, as on a Motif push button.
+do_input move "$(cx 3)" "$(cy 3)"
+do_input down left
+do_input move "$(cx 3)" $((Y0 + CH + 40))
+do_input move "$(cx 3)" "$(cy 3)"
+do_input up left
+current_is "pressed, dragged off and back, the release switches" 3
+do_input move "$(cx 2)" "$(cy 2)"
+do_input click left
+current_is "back to 2" 2
 do_input move "$(cx 1)" "$(cy 1)"
 do_input wheel 1
 current_is "the wheel down goes to the next one" 3

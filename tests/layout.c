@@ -19,14 +19,16 @@ static struct ws pool[MAX_WS];
 
 static void desktops(int n)
 {
-	n_ws = n;
+	n_all = n;
+	armed = NULL;
 	for (int i = 0; i < n; i++) {
-		pool[i] = (struct ws){ .caps =
+		pool[i] = (struct ws){ .seq = i, .caps =
 			EXT_WORKSPACE_HANDLE_V1_WORKSPACE_CAPABILITIES_ACTIVATE };
 		snprintf(pool[i].name, sizeof pool[i].name, "%d", i + 1);
-		wss[i] = &pool[i];
+		all_ws[i] = &pool[i];
 	}
 	pool[0].state = EXT_WORKSPACE_HANDLE_V1_STATE_ACTIVE;
+	mgr_done(NULL, NULL);
 	layout();
 }
 
@@ -39,16 +41,31 @@ static int in_row(int y)
 	return k;
 }
 
-static int left_click(int x, int y)
+/* The button pressed at x, y, or -1; the press stays held. */
+static int left_down(int x, int y)
 {
 	static int surf;
 	ptr_surface = (struct wl_surface *)&surf; /* only compared to NULL */
 	ptr_x = x;
 	ptr_y = y;
 	ptr_button(NULL, NULL, 0, 0, BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED);
-	int was = pressed;
-	pressed = -1;
+	for (int i = 0; i < n_ws; i++)
+		if (wss[i] == armed)
+			return i;
+	return -1;
+}
+
+static int left_click(int x, int y)
+{
+	int was = left_down(x, y);
+	armed = NULL;
 	return was;
+}
+
+static int rgb(const char *s)
+{
+	uint32_t c;
+	return parse_color(s, &c) ? (int)c : -1;
 }
 
 int main(void)
@@ -83,6 +100,36 @@ int main(void)
 	desktops(2);
 	r = wss[1]->r;
 	expect(left_click(r.x + r.w / 2, r.y + r.h / 2) == 1, "2 desktops: a press takes");
+
+	/* Held on 2, the list is re-sorted under the pointer: 2 moves, the press stays
+	 * with it and does not jump to whoever is under the pointer now. */
+	desktops(4);
+	r = wss[1]->r;
+	left_down(r.x + r.w / 2, r.y + r.h / 2);
+	for (int i = 0; i < 4; i++)
+		pool[i].has_coord = 1, pool[i].coord = i;
+	pool[1].coord = 9;
+	mgr_done(NULL, NULL);
+	layout();
+	expect(armed == &pool[1] && wss[3] == &pool[1], "re-sorted: the press stays on 2");
+	expect(!on_armed(r.x + r.w / 2, r.y + r.h / 2),
+		"re-sorted: the button now under the pointer is not the pressed one");
+
+	desktops(4);
+	pool[2].state = EXT_WORKSPACE_HANDLE_V1_STATE_HIDDEN;
+	mgr_done(NULL, NULL);
+	layout();
+	expect(n_ws == 3 && wss[2] == &pool[3], "a hidden desktop gets no button");
+	pool[2].state = 0;
+	mgr_done(NULL, NULL);
+	expect(n_ws == 4 && wss[2] == &pool[2], "shown again, it is back in its place");
+
+	expect(rgb("rgb:ff/80/0") == 0xff8000, "rgb:ff/80/0");
+	expect(rgb("rgb:ffff/0/0") == 0xff0000, "rgb: 4 digits");
+	expect(rgb("rgb: ff/00/00") == -1, "rgb: a space is refused, as in mwc");
+	expect(rgb("rgb:-1/0/0") == -1, "rgb: a sign is refused");
+	expect(rgb("rgb:0x1/0/0") == -1, "rgb: 0x is refused");
+	expect(rgb("rgb:ff/00/00/") == -1, "rgb: a trailing / is refused");
 
 	puts(failed ? "FAIL: layout" : "PASS: layout");
 	return failed;

@@ -7,11 +7,14 @@ PKGS = wayland-client wayland-cursor xkbcommon cairo pangocairo
 WAYLAND_PROTOCOLS := $(shell $(PKG_CONFIG) --variable=pkgdatadir wayland-protocols)
 WAYLAND_SCANNER := $(shell $(PKG_CONFIG) --variable=wayland_scanner wayland-scanner)
 XDG_SHELL = $(WAYLAND_PROTOCOLS)/stable/xdg-shell/xdg-shell.xml
+VIEWPORTER = $(WAYLAND_PROTOCOLS)/stable/viewporter/viewporter.xml
 # In wayland-protocols from 1.40 on.
 EXT_WORKSPACE = $(WAYLAND_PROTOCOLS)/staging/ext-workspace/ext-workspace-v1.xml
 
-PROTO_H = build/xdg-shell-client-protocol.h build/ext-workspace-v1-client-protocol.h
-PROTO_C = build/xdg-shell-protocol.c build/ext-workspace-v1-protocol.c
+PROTO_H = build/xdg-shell-client-protocol.h build/ext-workspace-v1-client-protocol.h \
+	build/viewporter-client-protocol.h
+PROTO_C = build/xdg-shell-protocol.c build/ext-workspace-v1-protocol.c \
+	build/viewporter-protocol.c
 
 # CPPFLAGS, CFLAGS, LDFLAGS and LDLIBS stay the user's, also on the command line:
 # `make CFLAGS=-O0` must not lose the include paths.
@@ -40,6 +43,12 @@ build/ext-workspace-v1-client-protocol.h: $(EXT_WORKSPACE) | build
 
 build/ext-workspace-v1-protocol.c: $(EXT_WORKSPACE) | build
 	$(WAYLAND_SCANNER) private-code $(EXT_WORKSPACE) $@
+
+build/viewporter-client-protocol.h: $(VIEWPORTER) | build
+	$(WAYLAND_SCANNER) client-header $(VIEWPORTER) $@
+
+build/viewporter-protocol.c: $(VIEWPORTER) | build
+	$(WAYLAND_SCANNER) private-code $(VIEWPORTER) $@
 
 install: deskControl
 	install -Dm755 deskControl $(DESTDIR)$(PREFIX)/bin/deskControl

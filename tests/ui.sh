@@ -266,7 +266,8 @@ wait "$PID_dc" 2>/dev/null
 # The cursor at scale 4. A theme has only some sizes, and its buffer scale must divide
 # the image's size, or other compositors than mwc kill the client. Adwaita's nearest to
 # 8 * 4 is 30, which 4 doesn't divide. mwc only logs it, so the test reads what
-# deskControl asks for in its protocol log.
+# deskControl asks for in its protocol log. The buffer then goes at scale 1, and a
+# viewport shows it at 30 / 4, about 8, as large as mwc shows its own cursor.
 WL_LOG=$DC_DIR/build/ui-wayland.log
 # Last cursor shown: "set_cursor calls, buffer scale, width, height".
 cursor_shown() {
@@ -289,6 +290,11 @@ cursor_shown() {
 	}
 	END { print last }' "$WL_LOG"
 }
+# The last size the cursor's viewport was given, "w h"; -1 -1 is none.
+cursor_dest() {
+	grep -o 'wp_viewport#[0-9]*\.set_destination(-\?[0-9]*, -\?[0-9]*)' "$WL_LOG" | tail -1 |
+		sed 's/.*(\(.*\), \(.*\))/\1 \2/'
+}
 cursor_ok() { # set_cursor-calls-at-least scale
 	local c s w h
 	read -r c s w h <<<"$(cursor_shown)"
@@ -308,6 +314,7 @@ X0=$(get deskControl x) Y0=$(get deskControl y)
 do_input move $((4 * $(cx 1))) $((4 * $(cy 1)))
 check "the cursor's buffer scale divides its size" "cursor_ok 1 4"
 echo "   set_cursor calls, scale, size: $(cursor_shown)"
+check "and the viewport shows 30 at 8, not 10" "[ \"\$(cursor_dest)\" = '8 8' ]"
 # The pointer stays; the scale changes under it.
 SHOWN=$(cursor_shown | cut -d' ' -f1)
 sed -i 's/outputScale: 4/outputScale: 2/' "$XDG_CONFIG_HOME/mwc/mwmrc"
@@ -315,6 +322,7 @@ reload_mwc
 check "the output is at scale 2" "[ \"\$(global output_HEADLESS-1 scale)\" = 200 ]"
 check "the cursor is set again at scale 2 without the pointer moving" \
 	"cursor_ok $((SHOWN + 1)) 2 && [ \"\$(cursor_shown | cut -d' ' -f2)\" = 2 ]"
+check "there the scale divides it, and the viewport is unset" "[ \"\$(cursor_dest)\" = '-1 -1' ]"
 kill "$PID_dc"
 wait "$PID_dc" 2>/dev/null
 [ "$("$DC" -v)" = "deskControl $(sed -n 's/^#define DESKCONTROL_VERSION "\(.*\)"/\1/p' "$DC_DIR/version.h")" ] ||

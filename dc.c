@@ -8,7 +8,8 @@
  * active colour; one with a window that wants attention is marked. It follows when
  * something else switches. It reads the same colours as mwc: MWC_INACTIVE /
  * MWC_ACTIVE from the environment, else Mwm*background and Mwm*activeBackground
- * from ~/.config/mwc/mwmrc, else the Motif defaults.
+ * from ~/.config/mwc/mwmrc, else the Motif defaults. The text takes
+ * Mwm*foreground and Mwm*activeForeground, else black or white.
  *
  * It asks for no server-side decoration and draws its own frame: only mwm's thin
  * border, no title bar, no buttons, no resize handles. The border takes the active
@@ -136,7 +137,7 @@ static struct xkb_state *kb_state;
 static int W, H, btn_w, sized_w, sized_h;
 static int focused;             /* it has the keyboard: the active frame */
 static uint32_t px_bg, px_top, px_bot, px_sel, px_urgent;
-static uint32_t xc_fg, xc_dim, xc_err;
+static uint32_t xc_fg, xc_dim, xc_sel_fg, xc_urgent_fg, xc_urgent_dim, xc_err;
 static cairo_t *cr;             /* what fill, bevel and text draw on */
 static PangoLayout *plo;
 static int font_asc, font_desc;
@@ -312,9 +313,10 @@ static char *mwmrc_get(const char *key, char *val, size_t n)
 	int len;
 	if (xdg && *xdg)
 		len = snprintf(path, sizeof path, "%s/mwc/mwmrc", xdg);
+	else if (home && *home)
+		len = snprintf(path, sizeof path, "%s/.config/mwc/mwmrc", home);
 	else
-		len = snprintf(path, sizeof path, "%s/.config/mwc/mwmrc",
-			home ? home : "");
+		return NULL; /* as mwc: no HOME, no mwmrc, not /.config */
 	if (len < 0 || (size_t)len >= sizeof path)
 		return NULL;
 	FILE *f = fopen(path, "r");
@@ -323,6 +325,14 @@ static char *mwmrc_get(const char *key, char *val, size_t n)
 	char *found = NULL;
 	size_t kl = strlen(key);
 	while (fgets(line, sizeof line, f)) {
+		size_t ll = strlen(line);
+		/* Too long for the buffer: no setting, and its rest is none either. */
+		if (ll && line[ll - 1] != '\n' && !feof(f)) {
+			int c;
+			while ((c = getc(f)) != EOF && c != '\n')
+				;
+			continue;
+		}
 		char *p = line;
 		while (isspace((unsigned char)*p))
 			p++;
@@ -349,13 +359,16 @@ static char *mwmrc_get(const char *key, char *val, size_t n)
 	return found;
 }
 
+static int mwmrc_color(const char *res, uint32_t *out)
+{
+	char v[256];
+	return parse_color(mwmrc_get(res, v, sizeof v), out);
+}
+
 static uint32_t setting(const char *env, const char *res, uint32_t def)
 {
 	uint32_t rgb;
-	char v[256];
-	if (parse_color(getenv(env), &rgb))
-		return rgb;
-	if (parse_color(mwmrc_get(res, v, sizeof v), &rgb))
+	if (parse_color(getenv(env), &rgb) || mwmrc_color(res, &rgb))
 		return rgb;
 	return def;
 }
@@ -363,7 +376,10 @@ static uint32_t setting(const char *env, const char *res, uint32_t def)
 static void theme_init(void)
 {
 	uint32_t bg = setting("MWC_INACTIVE", "background", 0xaeb2c3);
-	uint32_t fg = contrast(bg);
+	uint32_t fg;
+	/* Text as mwc's titles: the resource if set, else black or white. */
+	if (!mwmrc_color("foreground", &fg))
+		fg = contrast(bg);
 
 	px_bg = bg;
 	px_top = mix(bg, 0xffffff, 0.55f);
@@ -371,9 +387,15 @@ static void theme_init(void)
 	px_sel = setting("MWC_ACTIVE", "activeBackground", 0x7387ad);
 	/* Attention: amber, as far from both of them as it gets. */
 	px_urgent = mix(bg, 0xffa000, 0.7f);
+	if (!mwmrc_color("activeForeground", &xc_sel_fg))
+		xc_sel_fg = contrast(px_sel);
 	xc_fg = fg;
 	xc_dim = dimmed(bg, fg);
-	xc_err = fg == 0xffffff ? 0xffa0a0 : 0x8a0303; /* readable on dark themes */
+	/* mwc has no text colour for attention: black or white, dimmed on it. */
+	xc_urgent_fg = contrast(px_urgent);
+	xc_urgent_dim = dimmed(px_urgent, xc_urgent_fg);
+	/* readable on dark themes */
+	xc_err = contrast(bg) == 0xffffff ? 0xffa0a0 : 0x8a0303;
 
 	const char *f = getenv("DC_FONT");
 	PangoFontDescription *desc =
@@ -523,10 +545,10 @@ static void paint(void)
 		uint32_t face = active ? px_sel : urgent ? px_urgent : px_bg;
 		fill(face, w->r.x + BEV, w->r.y + BEV, w->r.w - 2 * BEV, w->r.h - 2 * BEV);
 		bevel(w->r, !down);
-		uint32_t ink = contrast(face);
+		uint32_t ink = active ? xc_sel_fg : urgent ? xc_urgent_fg : xc_fg;
 		if (!(w->caps & EXT_WORKSPACE_HANDLE_V1_WORKSPACE_CAPABILITIES_ACTIVATE) &&
 		    !active)
-			ink = xc_dim; /* can't be switched to */
+			ink = urgent ? xc_urgent_dim : xc_dim; /* can't be switched to */
 		text_centred(ink, w->r, down ? 1 : 0, w->name);
 	}
 }

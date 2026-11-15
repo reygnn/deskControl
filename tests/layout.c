@@ -6,6 +6,7 @@
 #define main dc_main
 #include "../dc.c"
 #undef main
+#include <sys/stat.h>
 
 static int failed;
 
@@ -165,6 +166,35 @@ int main(void)
 		"a long name is cut between characters");
 	ws_name(&pool[0], NULL, "1");
 	expect(!strcmp(pool[0].name, "1"), "a short name is taken as it is");
+
+	/* The text colours from mwmrc, as mwc's titles take them. A line too long for
+	 * the reader ends in what looks like a setting: it must not count. */
+	char dir[] = "/tmp/dc-layout-XXXXXX";
+	if (mkdtemp(dir)) {
+		char path[PATH_MAX];
+		snprintf(path, sizeof path, "%s/mwc", dir);
+		mkdir(path, 0700);
+		snprintf(path, sizeof path, "%s/mwc/mwmrc", dir);
+		FILE *f = fopen(path, "w");
+		fprintf(f, "Mwm*foreground: #112233\nMwm*activeForeground: rgb:44/55/66\n");
+		fprintf(f, "Mwm*menu: %*s\n", 600, "Mwm*background: #ff0000");
+		fclose(f);
+		setenv("XDG_CONFIG_HOME", dir, 1);
+		theme_init();
+		expect(xc_fg == 0x112233, "Mwm*foreground is the text on a button");
+		expect(xc_sel_fg == 0x445566, "Mwm*activeForeground on the current one");
+		expect(px_bg == 0xaeb2c3, "the tail of a too long line is no setting");
+		unlink(path);
+		snprintf(path, sizeof path, "%s/mwc", dir);
+		rmdir(path);
+		rmdir(dir);
+	}
+	setenv("XDG_CONFIG_HOME", "/nonexistent", 1);
+	theme_init();
+	expect(xc_sel_fg == 0x000000, "without it, black on the active colour");
+	/* Amber with dim ink of its own, not the face's: at least 4.5:1. */
+	float la = luminance(px_urgent) + 0.05f, ld = luminance(xc_urgent_dim) + 0.05f;
+	expect((la > ld ? la / ld : ld / la) >= 4.5f, "dim on amber is readable");
 
 	puts(failed ? "FAIL: layout" : "PASS: layout");
 	return failed;

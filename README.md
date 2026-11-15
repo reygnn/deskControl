@@ -76,7 +76,8 @@ Keys do not repeat. Desktops the compositor marks hidden get no button.
 | `MWC_INACTIVE`, `MWC_ACTIVE` | `#aeb2c3`, `#7387ad` | background, current desktop and border with the keyboard |
 
 Without the variables it reads `Mwm*background` and `Mwm*activeBackground` from
-`~/.config/mwc/mwmrc`, else the Motif defaults.
+`~/.config/mwc/mwmrc`, else the Motif defaults. The labels take `Mwm*foreground` and
+`Mwm*activeForeground` from there, else black or white, whichever reads better.
 
 
 ## How this is built

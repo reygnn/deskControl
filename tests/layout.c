@@ -131,6 +131,10 @@ int main(void)
 	expect(rgb("rgb:0x1/0/0") == -1, "rgb: 0x is refused");
 	expect(rgb("rgb:ff/00/00/") == -1, "rgb: a trailing / is refused");
 
+	/* As in digitalClock, pixel for pixel; mix(bg, fg, 0.6) was 4.38:1 and 3.35:1. */
+	expect(xc_dim == 0x3d3e44, "dim on the default face: 3d3e44, at least 4.5:1");
+	expect(dimmed(0x7387ad, contrast(0x7387ad)) == 0x171b23, "dim on 7387ad: 171b23");
+
 	puts(failed ? "FAIL: layout" : "PASS: layout");
 	return failed;
 }

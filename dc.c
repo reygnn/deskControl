@@ -239,14 +239,34 @@ static float linear(unsigned c)
 	return v <= 0.04045f ? v / 12.92f : powf((v + 0.055f) / 1.055f, 2.4f);
 }
 
+/* WCAG's relative luminance. */
+static float luminance(uint32_t c)
+{
+	return 0.2126f * linear((c >> 16) & 0xff) + 0.7152f * linear((c >> 8) & 0xff) +
+		0.0722f * linear(c & 0xff);
+}
+
 /* Black or white, whichever has the higher WCAG contrast on bg. The two are equal
  * at a relative luminance of sqrt(1.05 * 0.05) - 0.05, a grey of about 0x76: a
  * mid-tone such as mwc's activeBackground gets black. */
 static uint32_t contrast(uint32_t bg)
 {
-	float l = 0.2126f * linear((bg >> 16) & 0xff) + 0.7152f * linear((bg >> 8) & 0xff) +
-		0.0722f * linear(bg & 0xff);
+	float l = luminance(bg);
 	return (l + 0.05f) * (l + 0.05f) > 1.05f * 0.05f ? 0x000000 : 0xffffff;
+}
+
+/* Dimmed towards fg, but no further than WCAG AA's 4.5:1 for small text allows; fg
+ * itself if even that falls short. The same steps as digitalClock. */
+static uint32_t dimmed(uint32_t bg, uint32_t fg)
+{
+	float lb = luminance(bg) + 0.05f;
+	for (int k = 12; k < 20; k++) {
+		uint32_t c = mix(bg, fg, k / 20.0f);
+		float lc = luminance(c) + 0.05f;
+		if ((lb > lc ? lb / lc : lc / lb) >= 4.5f)
+			return c;
+	}
+	return fg;
 }
 
 /* What mwc reads: "#rrggbb", names like "gold", and rgb:r/g/b with 1 to 4 hex
@@ -347,7 +367,7 @@ static void theme_init(void)
 	/* Attention: amber, as far from both of them as it gets. */
 	px_urgent = mix(bg, 0xffa000, 0.7f);
 	xc_fg = fg;
-	xc_dim = mix(bg, fg, 0.6f);
+	xc_dim = dimmed(bg, fg);
 	xc_err = fg == 0xffffff ? 0xffa0a0 : 0x8a0303; /* readable on dark themes */
 
 	const char *f = getenv("DC_FONT");

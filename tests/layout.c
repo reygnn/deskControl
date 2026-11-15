@@ -176,12 +176,14 @@ int main(void)
 		FILE *f = fopen(path, "w");
 		fprintf(f, "Mwm*foreground: #112233\nMwm*activeForeground: rgb:44/55/66\n");
 		fprintf(f, "Mwm*menu: %*s\n", 600, "Mwm*background: #ff0000");
+		fprintf(f, "Mwm*activeBackground: %*s\n", 600, "#123456");
 		fclose(f);
 		setenv("XDG_CONFIG_HOME", dir, 1);
 		theme_init();
 		expect(xc_fg == 0x112233, "Mwm*foreground is the text on a button");
 		expect(xc_sel_fg == 0x445566, "Mwm*activeForeground on the current one");
 		expect(px_bg == 0xaeb2c3, "the tail of a too long line is no setting");
+		expect(px_sel == 0x123456, "a long line is still a setting");
 		unlink(path);
 		snprintf(path, sizeof path, "%s/mwc", dir);
 		rmdir(path);

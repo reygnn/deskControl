@@ -308,7 +308,7 @@ static int parse_color(const char *s, uint32_t *out)
 /* Last global "Mwm*key: value" line of ~/.config/mwc/mwmrc. */
 static char *mwmrc_get(const char *key, char *val, size_t n)
 {
-	char path[PATH_MAX], line[512];
+	char path[PATH_MAX];
 	const char *home = getenv("HOME"), *xdg = getenv("XDG_CONFIG_HOME");
 	int len;
 	if (xdg && *xdg)
@@ -322,17 +322,9 @@ static char *mwmrc_get(const char *key, char *val, size_t n)
 	FILE *f = fopen(path, "r");
 	if (!f)
 		return NULL;
-	char *found = NULL;
-	size_t kl = strlen(key);
-	while (fgets(line, sizeof line, f)) {
-		size_t ll = strlen(line);
-		/* Too long for the buffer: no setting, and its rest is none either. */
-		if (ll && line[ll - 1] != '\n' && !feof(f)) {
-			int c;
-			while ((c = getc(f)) != EOF && c != '\n')
-				;
-			continue;
-		}
+	char *found = NULL, *line = NULL;	/* whole lines, however long, as osDisplay */
+	size_t kl = strlen(key), cap = 0;
+	while (getline(&line, &cap, f) > 0) {
 		char *p = line;
 		while (isspace((unsigned char)*p))
 			p++;
@@ -355,6 +347,7 @@ static char *mwmrc_get(const char *key, char *val, size_t n)
 		if ((size_t)snprintf(val, n, "%s", p) < n)
 			found = val;
 	}
+	free(line);
 	fclose(f);
 	return found;
 }

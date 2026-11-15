@@ -154,8 +154,6 @@ int main(void)
 	/* Too old to bind: nothing is asked of the (absent) registry. */
 	registry_global(NULL, NULL, 1, wl_compositor_interface.name, 3);
 	expect(!compositor, "wl_compositor 3 is not taken");
-	registry_global(NULL, NULL, 2, wl_seat_interface.name, 2);
-	expect(!seat, "wl_seat 2 is not taken");
 
 	/* 31 two-byte characters fill 62 of the 63 bytes; the 32nd does not fit whole. */
 	char longname[80] = "";

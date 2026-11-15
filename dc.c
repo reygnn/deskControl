@@ -1036,7 +1036,11 @@ static void seat_capabilities(void *data, struct wl_seat *s, uint32_t caps)
 		wl_pointer_add_listener(pointer, &pointer_listener, NULL);
 	} else if (!want_ptr && pointer) {
 		unpress();
-		wl_pointer_release(pointer);
+		/* release exists from wl_seat 3 on; an older seat only knows destroy. */
+		if (wl_pointer_get_version(pointer) >= WL_POINTER_RELEASE_SINCE_VERSION)
+			wl_pointer_release(pointer);
+		else
+			wl_pointer_destroy(pointer);
 		pointer = NULL;
 		ptr_surface = NULL;
 	}
@@ -1044,7 +1048,10 @@ static void seat_capabilities(void *data, struct wl_seat *s, uint32_t caps)
 		keyboard = wl_seat_get_keyboard(s);
 		wl_keyboard_add_listener(keyboard, &keyboard_listener, NULL);
 	} else if (!want_kb && keyboard) {
-		wl_keyboard_release(keyboard);
+		if (wl_keyboard_get_version(keyboard) >= WL_KEYBOARD_RELEASE_SINCE_VERSION)
+			wl_keyboard_release(keyboard);
+		else
+			wl_keyboard_destroy(keyboard);
 		keyboard = NULL;
 		/* Gone without a leave, perhaps: the frame goes inactive all the same. */
 		focused = 0;
@@ -1073,14 +1080,13 @@ static const struct xdg_wm_base_listener wm_base_listener = { wm_ping };
 static void registry_global(void *data, struct wl_registry *r, uint32_t name,
 	const char *iface, uint32_t ver)
 {
-	/* wl_surface.damage_buffer is from version 4, the pointer's and keyboard's
-	 * release from wl_seat 3: older ones are not taken. */
+	/* wl_surface.damage_buffer is from version 4: an older one is not taken. */
 	if (!strcmp(iface, wl_compositor_interface.name) && ver >= 4) {
 		compositor = wl_registry_bind(r, name, &wl_compositor_interface,
 			MIN(ver, 6));
 	} else if (!strcmp(iface, wl_shm_interface.name)) {
 		shm = wl_registry_bind(r, name, &wl_shm_interface, 1);
-	} else if (!strcmp(iface, wl_seat_interface.name) && !seat && ver >= 3) {
+	} else if (!strcmp(iface, wl_seat_interface.name) && !seat) {
 		seat = wl_registry_bind(r, name, &wl_seat_interface, MIN(ver, 7));
 		seat_global = name;
 		wl_seat_add_listener(seat, &seat_listener, NULL);

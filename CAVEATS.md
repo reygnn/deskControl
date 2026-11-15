@@ -16,7 +16,7 @@ Only the first nine desktops have a number key, and at most 32 get a button.
 It draws at the integer scale the compositor asks for with wl_compositor 6. A
 fractional scale is drawn at the next integer and scaled down by the compositor; an
 older compositor never asks, and there the window stays at scale 1 and is blurred.
-Below wl_compositor 4 deskControl does not start, below wl_seat 3 it takes no input.
+Below wl_compositor 4 deskControl does not start.
 
 The cursor comes in the theme's sizes only. When the scale doesn't divide that size,
 a viewport shows it at its size over the scale. Without wp_viewporter it gets the

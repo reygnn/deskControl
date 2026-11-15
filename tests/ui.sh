@@ -358,7 +358,7 @@ wait "$PID_dc" 2>/dev/null
 echo "ok: -v prints the version"
 "$DC" -h 2>/dev/null || fail "-h: exit $?"
 echo "ok: -h exits 0"
-for a in "-v junk" "-x"; do
+for a in "-v junk" "-h junk" "-x"; do
 	"$DC" $a 2>/dev/null && fail "$a: exit 0"
 	echo "ok: $a is refused"
 done

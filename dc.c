@@ -1197,8 +1197,11 @@ static void cursor_show(void)
 	int d = cursor_buf_scale;
 	int hx = cursor_img->hotspot_x / d, hy = cursor_img->hotspot_y / d;
 	if (cursor_vw > 0) {
-		hx = cursor_img->hotspot_x * cursor_vw / cursor_img->width;
-		hy = cursor_img->hotspot_y * cursor_vh / cursor_img->height;
+		/* Rounded as the viewport's size is. */
+		hx = (cursor_img->hotspot_x * cursor_vw + cursor_img->width / 2) /
+			cursor_img->width;
+		hy = (cursor_img->hotspot_y * cursor_vh + cursor_img->height / 2) /
+			cursor_img->height;
 	}
 	wl_pointer_set_cursor(pointer, ptr_serial, cursor_surf, hx, hy);
 	if (cursor_vp)
@@ -1273,7 +1276,7 @@ int main(int argc, char **argv)
 			printf("deskControl %s\n", DESKCONTROL_VERSION);
 			return 0;
 		}
-		int help = !strcmp(argv[1], "-h") || !strcmp(argv[1], "--help");
+		int help = argc == 2 && (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help"));
 		fprintf(stderr, "usage: deskControl [-v]\n"
 			"Environment: DC_FONT (default \"Sans 10\"), "
 			"MWC_INACTIVE, MWC_ACTIVE.\n");

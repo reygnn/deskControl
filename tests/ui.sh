@@ -351,6 +351,12 @@ check "the output is at scale 2" "[ \"\$(global output_HEADLESS-1 scale)\" = 200
 check "the cursor is set again at scale 2 without the pointer moving" \
 	"cursor_ok $((SHOWN + 1)) 2 && [ \"\$(cursor_shown | cut -d' ' -f2)\" = 2 ]"
 check "there the scale divides it, and the viewport is unset" "[ \"\$(cursor_dest)\" = '-1 -1' ]"
+# The old theme's buffers go with it: the cursor surface let go of its buffer first.
+CURSOR_SURF=$(grep -o 'wl_pointer#[0-9]*\.set_cursor([0-9]*, wl_surface#[0-9]*' "$WL_LOG" |
+	tail -1 | sed 's/.*#//')
+grep -q "wl_surface#$CURSOR_SURF\.attach(nil" "$WL_LOG" ||
+	fail "the cursor surface kept a buffer of the destroyed theme"
+echo "ok: before the theme goes, the cursor surface drops its buffer"
 kill "$PID_dc"
 wait "$PID_dc" 2>/dev/null
 [ "$("$DC" -v)" = "deskControl $(sed -n 's/^#define DESKCONTROL_VERSION "\(.*\)"/\1/p' "$DC_DIR/version.h")" ] ||

@@ -397,8 +397,11 @@ wait "$PID_dc" 2>/dev/null
 [ "$("$DC" -v)" = "deskControl $(sed -n 's/^#define DESKCONTROL_VERSION "\(.*\)"/\1/p' "$DC_DIR/version.h")" ] ||
 	fail "-v: $("$DC" -v)"
 echo "ok: -v prints the version"
-"$DC" -h 2>/dev/null || fail "-h: exit $?"
-echo "ok: -h exits 0"
+"$DC" -h 2>/dev/null | grep -q '^usage: deskControl' || fail "-h: no usage on stdout"
+"$DC" -h >/dev/null 2>/dev/null || fail "-h: exit $?"
+echo "ok: -h prints the usage on stdout and exits 0"
+[ -z "$("$DC" -x 2>/dev/null)" ] || fail "-x: the usage went to stdout"
+echo "ok: a refused argument's usage goes to stderr"
 for a in "-v junk" "-h junk" "--help" "-x"; do
 	"$DC" $a 2>/dev/null && fail "$a: exit 0"
 	echo "ok: $a is refused"

@@ -44,19 +44,11 @@ the second line puts it in the top right corner.
 
 ## Look
 
-The buttons fill two rows in the order of the desktops: 1 2 over 3 4, 1 2 3 over 4 5 6.
-The window is always two buttons high, as high as pulseControl and digitalClock with the
-same font, so the three line up in the dock. All buttons are as wide as the longest
-name needs, and the window is as large as its buttons.
-
-The current desktop is pushed in, in the active colour. A desktop with a window that
-wants attention is marked in amber until it is switched to or the window closes. When
-another program switches, deskControl follows.
-
-It draws only mwm's thin border, no title bar, buttons or resize handles. The border
-takes the active colour while deskControl has the keyboard. The colours are mwc's:
-`MWC_INACTIVE` and `MWC_ACTIVE` from the environment, else `Mwm*background` and
-`Mwm*activeBackground` from the mwmrc, else the Motif defaults.
+Two rows of buttons in the order of the desktops, 1 2 over 3 4, as high as pulseControl
+and digitalClock so the three line up in the dock. The current desktop is pushed in, in
+the active colour, also after a switch from elsewhere; one with a window that wants
+attention is amber. Only mwm's thin border, in the active colour while deskControl has
+the keyboard. The colours are mwc's, see Configuration.
 
 
 ## Keys
@@ -81,13 +73,15 @@ Super or Ctrl held no key acts, except Ctrl+Q and Ctrl+W. Keys do not repeat.
 | `DC_FONT` | `Sans 10` | Pango font name, e.g. `Sans Bold 11` |
 | `MWC_INACTIVE`, `MWC_ACTIVE` | `#aeb2c3`, `#7387ad` | background, current desktop and border with the keyboard |
 
+Without the variables it reads `Mwm*background` and `Mwm*activeBackground` from
+`~/.config/mwc/mwmrc`, else the Motif defaults.
+
 
 ## How this is built
 
 deskControl is developed with Claude (Anthropic) as a coding assistant. I set the
-scope and review the changes; Claude writes most of the code and the tests. `make
-test` drives deskControl in a headless mwc and checks it in mwc's state and in
-screenshots. What is open is written down in CAVEATS.
+scope and review the changes; Claude writes most of the code and the tests, see
+Testing. Known limits are written down in CAVEATS.
 
 
 ## Testing

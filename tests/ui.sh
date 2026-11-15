@@ -194,6 +194,21 @@ current_is "1 to the first" 1
 do_input key alt+3
 sleep 0.2
 current_is "Alt+3 is not 3" 1
+do_input key End
+current_is "End to the last" 4
+do_input key Home
+current_is "Home to the first" 1
+do_input key Down
+current_is "Down to the next" 2
+do_input key Up
+current_is "Up to the one before" 1
+# At the ends the wheel stops, and a turn the other way still works after it.
+do_input move "$(cx 1)" "$(cy 1)"
+do_input wheel -1
+sleep 0.2
+current_is "the wheel up at the first one stays there" 1
+do_input wheel 1
+current_is "and down from there goes on" 2
 
 # ---- following what others do -----------------------------------------------------------
 
@@ -227,15 +242,28 @@ wait "$PID_late" 2>/dev/null
 do_input move "$(cx 1)" "$(cy 1)"
 do_input click left
 check "deskControl has the focus again" "[ \"\$(get deskControl kbfocus)\" = 1 ]"
-do_input key q
-for ((i = 0; i < 50; i++)); do
-	kill -0 "$PID_dc" 2>/dev/null || break
-	sleep 0.1
+quits_with() { # key
+	do_input key "$1"
+	for ((i = 0; i < 50; i++)); do
+		kill -0 "$PID_dc" 2>/dev/null || break
+		sleep 0.1
+	done
+	kill -0 "$PID_dc" 2>/dev/null && fail "$1 doesn't quit"
+	wait "$PID_dc"
+	[ $? = 0 ] || fail "deskControl didn't exit with 0 on $1"
+	echo "ok: $1 quits"
+}
+quits_with q
+for k in Escape ctrl+q ctrl+w; do
+	check "deskControl is gone" "[ -z \"\$(get deskControl x)\" ]"
+	WAYLAND_DISPLAY=wayland-0 "$DC" >>"$DC_LOG" 2>&1 &
+	PID_dc=$!
+	check "deskControl is back" "[ -n \"\$(get deskControl x)\" ]"
+	do_input move "$(cx 1)" "$(cy 1)"
+	do_input click left
+	check "with the keyboard" "[ \"\$(get deskControl kbfocus)\" = 1 ]"
+	quits_with "$k"
 done
-kill -0 "$PID_dc" 2>/dev/null && fail "q doesn't quit"
-wait "$PID_dc"
-[ $? = 0 ] || fail "deskControl didn't exit with 0"
-echo "ok: q quits"
 
 # ---- a scaled output ---------------------------------------------------------------------
 

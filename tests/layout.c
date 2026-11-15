@@ -196,6 +196,17 @@ int main(void)
 	float la = luminance(px_urgent) + 0.05f, ld = luminance(xc_urgent_dim) + 0.05f;
 	expect((la > ld ? la / ld : ld / la) >= 4.5f, "dim on amber is readable");
 
+	/* Both sides of the 0x76 grey, and a dark theme from the environment. */
+	expect(contrast(0x777777) == 0x000000 && contrast(0x757575) == 0xffffff,
+		"black from 0x77 up, white from 0x75 down");
+	setenv("MWC_INACTIVE", "#303030", 1);
+	setenv("MWC_ACTIVE", "rgb:a/b/c", 1);
+	theme_init();
+	expect(px_bg == 0x303030 && xc_fg == 0xffffff, "MWC_INACTIVE: dark, white text");
+	expect(px_sel == 0xaabbcc, "MWC_ACTIVE, rgb: with one digit");
+	unsetenv("MWC_INACTIVE");
+	unsetenv("MWC_ACTIVE");
+
 	puts(failed ? "FAIL: layout" : "PASS: layout");
 	return failed;
 }

@@ -1303,7 +1303,7 @@ int main(int argc, char **argv)
 			printf("deskControl %s\n", DESKCONTROL_VERSION);
 			return 0;
 		}
-		int help = argc == 2 && (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help"));
+		int help = argc == 2 && !strcmp(argv[1], "-h");
 		fprintf(stderr, "usage: deskControl [-v]\n"
 			"Environment: DC_FONT (default \"Sans 10\"), "
 			"MWC_INACTIVE, MWC_ACTIVE.\n");

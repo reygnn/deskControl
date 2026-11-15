@@ -135,6 +135,21 @@ int main(void)
 	expect(xc_dim == 0x3d3e44, "dim on the default face: 3d3e44, at least 4.5:1");
 	expect(dimmed(0x7387ad, contrast(0x7387ad)) == 0x171b23, "dim on 7387ad: 171b23");
 
+	/* text_centred() puts the text at the left of a box maxw wide: a right-to-left
+	 * name must start there too, not at its right end. */
+	const char *names[] = { "12", "\u05d0\u05d1", "\u0645\u0631\u062d\u0628\u0627" };
+	for (int i = 0; i < 3; i++) {
+		PangoRectangle ink, log;
+		int w = textw(names[i]);
+		pango_layout_set_text(plo, names[i], -1);
+		pango_layout_set_width(plo, (w + 40) * PANGO_SCALE);
+		pango_layout_get_pixel_extents(plo, &ink, &log);
+		pango_layout_set_width(plo, -1);
+		char what[80];
+		snprintf(what, sizeof what, "name %d starts at the left of its box (%d)", i, log.x);
+		expect(log.x == 0, what);
+	}
+
 	puts(failed ? "FAIL: layout" : "PASS: layout");
 	return failed;
 }

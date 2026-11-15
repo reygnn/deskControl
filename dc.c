@@ -381,6 +381,9 @@ static void theme_init(void)
 	plo = pango_layout_new(pctx);
 	pango_layout_set_font_description(plo, desc);
 	pango_layout_set_single_paragraph_mode(plo, TRUE);
+	/* Left to right as a paragraph: text_centred() places the text at the left of
+	 * its box, and a right-to-left name would otherwise be flushed to its right. */
+	pango_layout_set_auto_dir(plo, FALSE);
 	PangoFontMetrics *m = pango_context_get_metrics(pctx, desc, NULL);
 	font_asc = PANGO_PIXELS_CEIL(pango_font_metrics_get_ascent(m));
 	font_desc = PANGO_PIXELS_CEIL(pango_font_metrics_get_descent(m));

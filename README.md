@@ -82,8 +82,8 @@ Without the variables it reads `Mwm*background` and `Mwm*activeBackground` from
 
 ## How this is built
 
-deskControl is developed with Claude (Anthropic) as a coding assistant. I set the
-scope and review the changes; Claude writes most of the code and the tests, see
+deskControl is developed with Claude (Anthropic) as a coding assistant. I set the scope
+and the design and review the changes; Claude writes most of the code and the tests, see
 Testing. Known limits are written down in CAVEATS.
 
 

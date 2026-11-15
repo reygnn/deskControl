@@ -344,8 +344,13 @@ static char *mwmrc_get(const char *key, char *val, size_t n)
 		char *e = p + strlen(p);
 		while (e > p && isspace((unsigned char)e[-1]))
 			*--e = 0;
-		if ((size_t)snprintf(val, n, "%s", p) < n)
+		/* The last line wins, as in mwc: one too long to keep is no value,
+		 * not a cut one and not the line before it. */
+		found = NULL;
+		if ((size_t)(e - p) < n) {
+			memcpy(val, p, e - p + 1);
 			found = val;
+		}
 	}
 	free(line);
 	fclose(f);
@@ -844,8 +849,8 @@ static void kb_keymap(void *data, struct wl_keyboard *k, uint32_t format,
 	close(fd);
 	if (s == MAP_FAILED)
 		return;
-	/* By its size: a keymap need not end in a NUL inside the mapping. */
-	struct xkb_keymap *map = xkb_keymap_new_from_buffer(xkb, s, size,
+	/* Bounded by its size, which may or may not count a closing NUL. */
+	struct xkb_keymap *map = xkb_keymap_new_from_buffer(xkb, s, strnlen(s, size),
 		XKB_KEYMAP_FORMAT_TEXT_V1, XKB_KEYMAP_COMPILE_NO_FLAGS);
 	munmap(s, size);
 	struct xkb_state *state = map ? xkb_state_new(map) : NULL;
@@ -966,11 +971,17 @@ static void ptr_button(void *data, struct wl_pointer *p, uint32_t serial,
 		activate(at);
 }
 
+static void ptr_frame(void *data, struct wl_pointer *p);
+
 static void ptr_axis(void *data, struct wl_pointer *p, uint32_t time,
 	uint32_t axis, wl_fixed_t value)
 {
-	if (axis == WL_POINTER_AXIS_VERTICAL_SCROLL)
-		axis_acc += wl_fixed_to_double(value);
+	if (axis != WL_POINTER_AXIS_VERTICAL_SCROLL)
+		return;
+	axis_acc += wl_fixed_to_double(value);
+	/* Before wl_seat 5 no frame ends the event: each one counts by itself. */
+	if (wl_pointer_get_version(p) < WL_POINTER_FRAME_SINCE_VERSION)
+		ptr_frame(data, p);
 }
 
 static void ptr_axis_source(void *data, struct wl_pointer *p, uint32_t source)
@@ -1143,17 +1154,33 @@ static const struct xdg_toplevel_listener toplevel_listener = {
 };
 
 /* The theme's cursor at the window's scale, loaded again when that changes. */
+/* XCURSOR_SIZE, 24 if unset or bad, at most 256: times the scale it must not
+ * overflow. */
+static int cursor_size(void)
+{
+	const char *s = getenv("XCURSOR_SIZE");
+	char *end;
+	long v = s ? strtol(s, &end, 10) : 0;
+	if (!s || end == s || *end || v <= 0)
+		return 24;
+	return v > 256 ? 256 : (int)v;
+}
+
 static void cursor_load(void)
 {
 	if (cursor_scale == scale)
 		return;
-	if (cursor_theme)
+	if (cursor_theme) {
+		/* Its buffers go with it: the surface must not show one of them. */
+		if (cursor_surf) {
+			wl_surface_attach(cursor_surf, NULL, 0, 0);
+			wl_surface_commit(cursor_surf);
+		}
 		wl_cursor_theme_destroy(cursor_theme);
+	}
 	cursor_theme = NULL;
 	cursor_img = NULL;
-	const char *s = getenv("XCURSOR_SIZE");
-	int size = s && atoi(s) > 0 ? atoi(s) : 24;
-	cursor_theme = wl_cursor_theme_load(getenv("XCURSOR_THEME"), size * scale, shm);
+	cursor_theme = wl_cursor_theme_load(getenv("XCURSOR_THEME"), cursor_size() * scale, shm);
 	if (!cursor_theme)
 		return; /* tried again on the next enter */
 	struct wl_cursor *c = wl_cursor_theme_get_cursor(cursor_theme, "default");

@@ -177,10 +177,13 @@ int main(void)
 		fprintf(f, "Mwm*foreground: #112233\nMwm*activeForeground: rgb:44/55/66\n");
 		fprintf(f, "Mwm*menu: %*s\n", 600, "Mwm*background: #ff0000");
 		fprintf(f, "Mwm*activeBackground: %*s\n", 600, "#123456");
+		/* The last foreground is too long to keep: as in mwc, it wins and is no
+		 * colour, so the text is black on the default face again. */
+		fprintf(f, "Mwm*foreground: #%0300d\n", 0);
 		fclose(f);
 		setenv("XDG_CONFIG_HOME", dir, 1);
 		theme_init();
-		expect(xc_fg == 0x112233, "Mwm*foreground is the text on a button");
+		expect(xc_fg == 0x000000, "a too long last value counts as none, as in mwc");
 		expect(xc_sel_fg == 0x445566, "Mwm*activeForeground on the current one");
 		expect(px_bg == 0xaeb2c3, "the tail of a too long line is no setting");
 		expect(px_sel == 0x123456, "a long line is still a setting");
@@ -206,6 +209,14 @@ int main(void)
 	expect(px_sel == 0xaabbcc, "MWC_ACTIVE, rgb: with one digit");
 	unsetenv("MWC_INACTIVE");
 	unsetenv("MWC_ACTIVE");
+
+	unsetenv("XCURSOR_SIZE");
+	expect(cursor_size() == 24, "XCURSOR_SIZE unset: 24");
+	setenv("XCURSOR_SIZE", "1000000000", 1);
+	expect(cursor_size() == 256, "XCURSOR_SIZE huge: 256, no overflow with the scale");
+	setenv("XCURSOR_SIZE", "32x", 1);
+	expect(cursor_size() == 24, "XCURSOR_SIZE not a number: 24");
+	unsetenv("XCURSOR_SIZE");
 
 	puts(failed ? "FAIL: layout" : "PASS: layout");
 	return failed;

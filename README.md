@@ -44,8 +44,9 @@ the second line puts it in the top right corner.
 
 ## Look
 
-Two rows of buttons in the order of the desktops, 1 2 over 3 4, as high as pulseControl
-and digitalClock so the three line up in the dock. The current desktop is pushed in, in
+Two rows of buttons in the order of the desktops, 1 2 over 3 4, 1 2 3 over 4 5, as high
+as pulseControl and digitalClock so the three line up in the dock. A single desktop
+gets one button in the middle, which does nothing. The current desktop is pushed in, in
 the active colour, also after a switch from elsewhere; one with a window that wants
 attention is amber. Only mwm's thin border, in the active colour while deskControl has
 the keyboard. The colours are mwc's, see Configuration.
@@ -88,7 +89,8 @@ Testing. Known limits are written down in CAVEATS.
 
     make test
 
-runs deskControl in a headless mwc with a simulated mouse and keyboard and checks its
+runs `make layout-test`, the layout for one to five desktops without a compositor, and
+then deskControl in a headless mwc with a simulated mouse and keyboard and checks its
 border and focus, the layout, switching by click, wheel and keys, following a switch
 from outside, the attention mark, and quitting. It needs a built mwc with
 `build/vinput`, `build/pngtool`, `build/workspacec`, `build/xclient` and `build/xdgc`

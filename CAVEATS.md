@@ -23,4 +23,5 @@ it gets the largest buffer scale that does and the compositor scales it up.
 
 ## Tests
 
-mwc has four desktops, so the test sees only the layout 1 2 over 3 4.
+mwc has four desktops, so `tests/ui.sh` sees only 1 2 over 3 4. Other numbers are
+checked by `make layout-test`, without a compositor: the layout, not the drawing.

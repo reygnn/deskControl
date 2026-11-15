@@ -424,16 +424,17 @@ static void text_centred(uint32_t c, struct rect r, int off, const char *s)
 	pango_layout_set_ellipsize(plo, PANGO_ELLIPSIZE_NONE);
 }
 
-/* Two rows, 1 2 over 3 4, 1 2 3 over 4 5 6: always two buttons high, as high as
- * pulseControl and digitalClock beside it. All as wide as the widest name needs and
- * at least a square and a half, inside the frame. */
+/* Two rows, 1 2 over 3 4, 1 2 3 over 4 5: the first row gets the odd one. Always two
+ * buttons high, as high as pulseControl and digitalClock beside it, also with a single
+ * desktop, whose button is centred. All as wide as the widest name needs and at least
+ * a square and a half, inside the frame. */
 static void layout(void)
 {
 	btn_w = barh * 3 / 2;
 	for (int i = 0; i < n_ws; i++)
 		btn_w = MAX(btn_w, textw(wss[i]->name) + 2 * BEV + 2 * PAD);
 	int n = MAX(n_ws, 1);
-	int rows = MIN(n, ROWS), cols = (n + ROWS - 1) / ROWS;
+	int rows = ROWS, cols = (n + ROWS - 1) / ROWS;
 	int want_w = 2 * (FRAME + PAD) + cols * btn_w + (cols - 1) * GAP;
 	int want_h = 2 * (FRAME + PAD) + rows * barh + (rows - 1) * GAP;
 	if (want_w != sized_w || want_h != sized_h) {
@@ -451,6 +452,8 @@ static void layout(void)
 		wss[i]->r = (struct rect){
 			FRAME + PAD + i % cols * (btn_w + GAP),
 			FRAME + PAD + i / cols * (barh + GAP), btn_w, barh };
+	if (n_ws == 1)
+		wss[0]->r.y += (barh + GAP) / 2;
 }
 
 /* mwm's thin border: a raised bevel and one line of the face inside it. */
@@ -537,9 +540,15 @@ static int current(void)
 	return -1;
 }
 
+/* A single desktop is only shown: there is nothing to switch to. */
+static int read_only(void)
+{
+	return n_ws == 1;
+}
+
 static void activate(int i)
 {
-	if (i < 0 || i >= n_ws || !ws_mgr ||
+	if (i < 0 || i >= n_ws || read_only() || !ws_mgr ||
 	    !(wss[i]->caps & EXT_WORKSPACE_HANDLE_V1_WORKSPACE_CAPABILITIES_ACTIVATE))
 		return;
 	if (wss[i]->state & EXT_WORKSPACE_HANDLE_V1_STATE_ACTIVE)
@@ -871,7 +880,7 @@ static void ptr_button(void *data, struct wl_pointer *p, uint32_t serial,
 		return;
 	int at = button_at(ptr_x, ptr_y);
 	if (state == WL_POINTER_BUTTON_STATE_PRESSED) {
-		pressed = at;
+		pressed = read_only() ? -1 : at;
 		dirty = 1;
 		return;
 	}

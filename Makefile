@@ -52,11 +52,19 @@ uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/deskControl \
 		$(DESTDIR)$(PREFIX)/share/applications/deskControl.desktop
 
+build/layout-test: tests/layout.c dc.c version.h $(PROTO_H) $(PROTO_C)
+	$(CC) $(DC_CFLAGS) -I. $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ tests/layout.c \
+		$(PROTO_C) $(DC_LIBS) $(LDLIBS)
+
+# The layout alone, without a compositor.
+layout-test: build/layout-test
+	build/layout-test
+
 # Needs a built mwc next to this directory, or in MWC_DIR, plus grim.
-test: deskControl
+test: deskControl layout-test
 	tests/ui.sh
 
 clean:
 	rm -rf deskControl build
 
-.PHONY: all install uninstall test clean
+.PHONY: all install uninstall layout-test test clean

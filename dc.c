@@ -127,7 +127,7 @@ static int cursor_vw, cursor_vh;  /* its size on the window, if the viewport set
 static int cursor_buf_scale;     /* its buffers' scale: one that divides their size */
 static uint32_t ptr_serial;      /* of the last enter, for set_cursor */
 static void cursor_load(void);
-static void cursor_show(void);
+static int cursor_show(void);
 
 static struct wl_keyboard *keyboard;
 static struct xkb_context *xkb;
@@ -1170,24 +1170,23 @@ static void cursor_load(void)
 {
 	if (cursor_scale == scale)
 		return;
-	if (cursor_theme) {
-		/* Its buffers go with it: the surface must not show one of them. */
-		if (cursor_surf) {
-			wl_surface_attach(cursor_surf, NULL, 0, 0);
-			wl_surface_commit(cursor_surf);
-		}
-		wl_cursor_theme_destroy(cursor_theme);
+	/* The new theme first: if it fails, the old one and its cursor stay, and
+	 * the next enter tries again. */
+	struct wl_cursor_theme *theme = wl_cursor_theme_load(getenv("XCURSOR_THEME"),
+		cursor_size() * scale, shm);
+	struct wl_cursor *c = NULL;
+	if (theme) {
+		c = wl_cursor_theme_get_cursor(theme, "default");
+		if (!c)
+			c = wl_cursor_theme_get_cursor(theme, "left_ptr");
 	}
-	cursor_theme = NULL;
-	cursor_img = NULL;
-	cursor_theme = wl_cursor_theme_load(getenv("XCURSOR_THEME"), cursor_size() * scale, shm);
-	if (!cursor_theme)
-		return; /* tried again on the next enter */
-	struct wl_cursor *c = wl_cursor_theme_get_cursor(cursor_theme, "default");
-	if (!c)
-		c = wl_cursor_theme_get_cursor(cursor_theme, "left_ptr");
-	if (!c)
+	if (!c) {
+		if (theme)
+			wl_cursor_theme_destroy(theme);
 		return;
+	}
+	struct wl_cursor_theme *old = cursor_theme;
+	cursor_theme = theme;
 	cursor_img = c->images[0];
 	cursor_scale = scale;
 	if (!cursor_surf)
@@ -1214,13 +1213,23 @@ static void cursor_load(void)
 				break;
 			}
 	}
+	if (old) {
+		/* The old theme's buffers go with it, so the surface must not show one
+		 * of them: the new cursor replaces it, or, off the window, nothing. As
+		 * digitalClock: it never flickers empty under the pointer. */
+		if (!cursor_show()) {
+			wl_surface_attach(cursor_surf, NULL, 0, 0);
+			wl_surface_commit(cursor_surf);
+		}
+		wl_cursor_theme_destroy(old);
+	}
 }
 
-/* The cursor on the window, while the pointer is over it. */
-static void cursor_show(void)
+/* The cursor on the window, while the pointer is over it: 1 if it was set. */
+static int cursor_show(void)
 {
 	if (!pointer || ptr_surface != surface || !cursor_img)
-		return;
+		return 0;
 	int d = cursor_buf_scale;
 	int hx = cursor_img->hotspot_x / d, hy = cursor_img->hotspot_y / d;
 	if (cursor_vw > 0) {
@@ -1237,6 +1246,7 @@ static void cursor_show(void)
 	wl_surface_attach(cursor_surf, wl_cursor_image_get_buffer(cursor_img), 0, 0);
 	wl_surface_damage_buffer(cursor_surf, 0, 0, cursor_img->width, cursor_img->height);
 	wl_surface_commit(cursor_surf);
+	return 1;
 }
 
 /* Sharp on a scaled output: wl_compositor 6 says which scale the output it is on

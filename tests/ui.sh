@@ -242,6 +242,61 @@ done
 echo "ok: sharp at scale 2"
 kill "$PID_dc"
 wait "$PID_dc" 2>/dev/null
+
+# The cursor at scale 4. A theme has only some sizes, and its buffer scale must divide
+# the image's size, or other compositors than mwc kill the client. Adwaita's nearest to
+# 8 * 4 is 30, which 4 doesn't divide. mwc only logs it, so the test reads what
+# deskControl asks for in its protocol log.
+WL_LOG=$DC_DIR/build/ui-wayland.log
+# Last cursor shown: "set_cursor calls, buffer scale, width, height".
+cursor_shown() {
+	awk '
+	match($0, /wl_shm_pool#[0-9]+\.create_buffer\(new id wl_buffer#[0-9]+, [0-9]+, [0-9]+, [0-9]+/) {
+		split(substr($0, RSTART, RLENGTH), f, /[#(, ]+/)
+		size[f[6]] = f[8] " " f[9]
+	}
+	match($0, /wl_pointer#[0-9]+\.set_cursor\([0-9]+, wl_surface#[0-9]+/) {
+		split(substr($0, RSTART, RLENGTH), f, /[#(, ]+/)
+		cur = f[5]; n++
+	}
+	match($0, /wl_surface#[0-9]+\.set_buffer_scale\([0-9]+/) {
+		split(substr($0, RSTART, RLENGTH), f, /[#.()]+/)
+		sc[f[2]] = f[4]
+	}
+	match($0, /wl_surface#[0-9]+\.attach\(wl_buffer#[0-9]+/) {
+		split(substr($0, RSTART, RLENGTH), f, /[#.()]+/)
+		if (f[2] == cur) last = n " " sc[cur] " " size[f[5]]
+	}
+	END { print last }' "$WL_LOG"
+}
+cursor_ok() { # set_cursor-calls-at-least scale
+	local c s w h
+	read -r c s w h <<<"$(cursor_shown)"
+	[ -n "$h" ] && [ "$c" -ge "$1" ] && [ "$s" -ge 1 ] && [ $((w % s)) = 0 ] &&
+		[ $((h % s)) = 0 ] && [ "$s" -le "$2" ]
+}
+printf 'Mwm*deskControl*allDesktops: true\nMwm*deskControl*geometry: +0+0\n' \
+	>"$XDG_CONFIG_HOME/mwc/mwmrc"
+echo 'Mwm*HEADLESS-1*outputScale: 4' >>"$XDG_CONFIG_HOME/mwc/mwmrc"
+reload_mwc
+check "the output is at scale 4" "[ \"\$(global output_HEADLESS-1 scale)\" = 400 ]"
+XCURSOR_SIZE=8 WAYLAND_DEBUG=client WAYLAND_DISPLAY=wayland-0 "$DC" 2>"$WL_LOG" &
+PID_dc=$!
+check "deskControl is mapped at scale 4" "[ -n \"\$(get deskControl x)\" ]"
+X0=$(get deskControl x) Y0=$(get deskControl y)
+# vinput counts in the 1280x720 of the output's pixels.
+do_input move $((4 * $(cx 1))) $((4 * $(cy 1)))
+check "the cursor's buffer scale divides its size" "cursor_ok 1 4"
+echo "   set_cursor calls, scale, size: $(cursor_shown)"
+# The pointer stays; the scale changes under it.
+SHOWN=$(cursor_shown | cut -d' ' -f1)
+sed -i 's/outputScale: 4/outputScale: 2/' "$XDG_CONFIG_HOME/mwc/mwmrc"
+reload_mwc
+check "the output is at scale 2" "[ \"\$(global output_HEADLESS-1 scale)\" = 200 ]"
+check "the cursor is set again at scale 2 without the pointer moving" \
+	"cursor_ok $((SHOWN + 1)) 2 && [ \"\$(cursor_shown | cut -d' ' -f2)\" = 2 ]"
+kill "$PID_dc"
+wait "$PID_dc" 2>/dev/null
 [ "$("$DC" -v)" = "deskControl $(sed -n 's/^#define DESKCONTROL_VERSION "\(.*\)"/\1/p' "$DC_DIR/version.h")" ] ||
 	fail "-v: $("$DC" -v)"
 echo "ok: -v prints the version"

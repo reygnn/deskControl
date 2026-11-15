@@ -5,8 +5,8 @@ Limits of deskControl that are known and left as they are.
 
 ## Layout
 
-Two rows suit an even number of desktops, which mwc has. With an odd number the second
-row is one button short.
+Two rows suit an even number of desktops, which mwc has. With 3, 5 or more odd ones the
+second row is one button short; a single desktop is centred between the two.
 
 The keys walk the desktops in their order, not the grid: Down goes to the next one, not
 to the one below.

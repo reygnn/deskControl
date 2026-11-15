@@ -5,6 +5,9 @@ PKG_CONFIG ?= pkg-config
 PKGS = wayland-client wayland-cursor xkbcommon cairo pangocairo
 
 WAYLAND_PROTOCOLS := $(shell $(PKG_CONFIG) --variable=pkgdatadir wayland-protocols)
+ifeq ($(WAYLAND_PROTOCOLS)$(filter clean uninstall,$(MAKECMDGOALS)),)
+$(error wayland-protocols 1.40 or later is needed (pkg-config finds none))
+endif
 WAYLAND_SCANNER := $(shell $(PKG_CONFIG) --variable=wayland_scanner wayland-scanner)
 XDG_SHELL = $(WAYLAND_PROTOCOLS)/stable/xdg-shell/xdg-shell.xml
 VIEWPORTER = $(WAYLAND_PROTOCOLS)/stable/viewporter/viewporter.xml

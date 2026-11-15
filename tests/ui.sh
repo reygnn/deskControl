@@ -345,6 +345,8 @@ echo "   set_cursor calls, scale, size: $(cursor_shown)"
 check "and the viewport shows 30 at 8, not 10" "[ \"\$(cursor_dest)\" = '8 8' ]"
 # The pointer stays; the scale changes under it.
 SHOWN=$(cursor_shown | cut -d' ' -f1)
+# From here on: an attach(nil) at startup is right, the scale may come before the enter.
+AT=$(wc -l <"$WL_LOG")
 sed -i 's/outputScale: 4/outputScale: 2/' "$XDG_CONFIG_HOME/mwc/mwmrc"
 reload_mwc
 check "the output is at scale 2" "[ \"\$(global output_HEADLESS-1 scale)\" = 200 ]"
@@ -371,6 +373,12 @@ gone() { grep -c 'wl_buffer#[0-9]*\.destroy()' "$WL_LOG"; }
 [ "$(gone)" -gt 0 ] || fail "the theme for scale 4 was not let go of"
 [ -z "$(cursor_kept)" ] || fail "with the pointer on it, a shown buffer was destroyed: $(cursor_kept)"
 echo "ok: with the pointer on it, the new cursor is shown before the old theme goes"
+# And never nothing in between: no attach(nil) on the cursor surface, as osDisplay checks.
+CURSOR_SURF=$(grep -o 'wl_pointer#[0-9]*\.set_cursor([0-9]*, wl_surface#[0-9]*' "$WL_LOG" |
+	tail -1 | sed 's/.*#//')
+tail -n +$((AT + 1)) "$WL_LOG" | grep -q "wl_surface#$CURSOR_SURF\.attach(nil" &&
+	fail "with the pointer on it, the cursor was empty for a moment"
+echo "ok: and it does not flicker empty"
 # The pointer off the window, the scale changes again: nothing is shown, and the
 # surface lets go of the old buffer before that goes.
 LEFT=$(grep -c 'wl_pointer#[0-9]*\.leave(' "$WL_LOG")

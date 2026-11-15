@@ -3,9 +3,10 @@
 # What it switches is read from mwc's state file, what it shows from screenshots.
 # It has its own sockets and touches no running session.
 #
-# Needs a built mwc with build/vinput, build/pngtool, build/workspacec and
-# build/xclient in MWC_DIR (by default ../mwc), grim and Xwayland. Output goes to
-# build/ui.log, deskControl's own to build/ui-deskControl.log.
+# Needs a built mwc with build/vinput, build/pngtool, build/workspacec, build/xclient
+# and build/xdgc in MWC_DIR (by default ../mwc), grim and Xwayland. Output goes to
+# build/ui.log, deskControl's own to build/ui-deskControl.log, the compositor's to
+# build/ui-wayland.log.
 DC_DIR=$(cd "$(dirname "$0")/.." && pwd)
 DC=${DC:-$DC_DIR/deskControl}
 LOG=$DC_DIR/build/ui.log
@@ -17,7 +18,7 @@ mkdir -p "$DC_DIR/build"
 cd "$MWC_DIR" || exit 1
 . tests/lib.sh
 require_tools grim Xwayland
-for tool in build/vinput build/pngtool build/workspacec build/xclient; do
+for tool in build/vinput build/pngtool build/workspacec build/xclient build/xdgc; do
 	[ -x "$tool" ] || { echo "FAIL: $MWC_DIR/$tool not built (make $tool)"; exit 1; }
 done
 
@@ -43,9 +44,6 @@ refresh
 WAYLAND_DISPLAY=wayland-0 "$DC" >>"$DC_LOG" 2>&1 &
 PID_dc=$!
 check "deskControl is mapped" "[ -n \"\$(get deskControl x)\" ]"
-sleep 0.3
-refresh
-KB_AT_MAP=$(get deskControl kbfocus)
 
 # Only its own thin frame: mwc adds no border and no title bar.
 [ "$(get deskControl bw)" = 0 ] && [ "$(get deskControl th)" = 0 ] ||
@@ -69,7 +67,7 @@ cy() { echo $(($(by "$1") + BH / 2)); }
 face_x() { echo $(($(bx "$1") + 4)); }
 
 face_is() { # description button rrggbb
-	local got i
+	local got= i
 	for ((i = 0; i < 30; i++)); do
 		if WAYLAND_DISPLAY=wayland-0 grim "$SHOT" 2>/dev/null; then
 			got=$(build/pngtool pixel "$SHOT" "$(face_x "$2")" "$(cy "$2")")
@@ -96,11 +94,23 @@ frame_is() { # description rrggbb
 	cp "$SHOT" "$ERR_SHOT" 2>/dev/null
 	fail "$1: the frame is $got, expected $2 (screenshot in $ERR_SHOT)"
 }
-if [ "$KB_AT_MAP" = 1 ]; then
-	frame_is "mapped with the keyboard, the frame is active" $SEL
-else
-	frame_is "mapped without the keyboard, the frame is inactive" $BG
-fi
+# Whether it gets the keyboard on mapping is mwc's choice, and may come late: the
+# frame has to agree with mwc's kbfocus as it is when the screenshot is taken.
+frame_follows_focus() {
+	local got= want= i
+	for ((i = 0; i < 30; i++)); do
+		refresh
+		[ "$(get deskControl kbfocus)" = 1 ] && want=$SEL || want=$BG
+		WAYLAND_DISPLAY=wayland-0 grim "$SHOT" 2>/dev/null &&
+			got=$(build/pngtool pixel "$SHOT" $((X0 + 2)) "$(cy 1)")
+		[ "$got" = "$want" ] &&
+			{ echo "ok: mapped, the frame follows the keyboard focus"; return 0; }
+		sleep 0.1
+	done
+	cp "$SHOT" "$ERR_SHOT" 2>/dev/null
+	fail "the frame is $got, expected $want for kbfocus (screenshot in $ERR_SHOT)"
+}
+frame_follows_focus
 
 face_is "desktop 1 is shown as the current one" 1 $SEL
 face_is "the others are not" 3 $BG
@@ -310,6 +320,12 @@ wait "$PID_dc" 2>/dev/null
 [ "$("$DC" -v)" = "deskControl $(sed -n 's/^#define DESKCONTROL_VERSION "\(.*\)"/\1/p' "$DC_DIR/version.h")" ] ||
 	fail "-v: $("$DC" -v)"
 echo "ok: -v prints the version"
+"$DC" -h 2>/dev/null || fail "-h: exit $?"
+echo "ok: -h exits 0"
+for a in "-v junk" "-x"; do
+	"$DC" $a 2>/dev/null && fail "$a: exit 0"
+	echo "ok: $a is refused"
+done
 
 kill -0 "$pid" || fail "mwc died"
 stop_vinput

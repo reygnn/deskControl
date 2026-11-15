@@ -150,6 +150,22 @@ int main(void)
 		expect(log.x == 0, what);
 	}
 
+	/* Too old to bind: nothing is asked of the (absent) registry. */
+	registry_global(NULL, NULL, 1, wl_compositor_interface.name, 3);
+	expect(!compositor, "wl_compositor 3 is not taken");
+	registry_global(NULL, NULL, 2, wl_seat_interface.name, 2);
+	expect(!seat, "wl_seat 2 is not taken");
+
+	/* 31 two-byte characters fill 62 of the 63 bytes; the 32nd does not fit whole. */
+	char longname[80] = "";
+	for (int i = 0; i < 32; i++)
+		strcat(longname, "\u00e4");
+	ws_name(&pool[0], NULL, longname);
+	expect(strlen(pool[0].name) == 62 && g_utf8_validate(pool[0].name, -1, NULL),
+		"a long name is cut between characters");
+	ws_name(&pool[0], NULL, "1");
+	expect(!strcmp(pool[0].name, "1"), "a short name is taken as it is");
+
 	puts(failed ? "FAIL: layout" : "PASS: layout");
 	return failed;
 }

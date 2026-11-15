@@ -99,6 +99,7 @@ static struct wl_display *dpy;
 static struct wl_compositor *compositor;
 static struct wl_shm *shm;
 static struct wl_seat *seat;
+static uint32_t seat_global;    /* its name in the registry */
 static struct xdg_wm_base *wm_base;
 static struct wl_surface *surface;
 static struct wl_callback *frame;       /* a frame is on its way */
@@ -601,7 +602,15 @@ static void ws_id(void *data, struct ext_workspace_handle_v1 *h, const char *id)
 static void ws_name(void *data, struct ext_workspace_handle_v1 *h, const char *name)
 {
 	struct ws *w = data;
-	snprintf(w->name, sizeof w->name, "%s", name);
+	size_t n = strlen(name);
+	if (n >= sizeof w->name) {
+		/* Cut before a whole character, not inside one. */
+		n = sizeof w->name - 1;
+		while (n > 0 && ((unsigned char)name[n] & 0xc0) == 0x80)
+			n--;
+	}
+	memcpy(w->name, name, n);
+	w->name[n] = '\0';
 }
 
 static void ws_coordinates(void *data, struct ext_workspace_handle_v1 *h,
@@ -816,7 +825,8 @@ static void kb_keymap(void *data, struct wl_keyboard *k, uint32_t format,
 	close(fd);
 	if (s == MAP_FAILED)
 		return;
-	struct xkb_keymap *map = xkb_keymap_new_from_string(xkb, s,
+	/* By its size: a keymap need not end in a NUL inside the mapping. */
+	struct xkb_keymap *map = xkb_keymap_new_from_buffer(xkb, s, size,
 		XKB_KEYMAP_FORMAT_TEXT_V1, XKB_KEYMAP_COMPILE_NO_FLAGS);
 	munmap(s, size);
 	struct xkb_state *state = map ? xkb_state_new(map) : NULL;
@@ -1037,13 +1047,16 @@ static const struct xdg_wm_base_listener wm_base_listener = { wm_ping };
 static void registry_global(void *data, struct wl_registry *r, uint32_t name,
 	const char *iface, uint32_t ver)
 {
-	if (!strcmp(iface, wl_compositor_interface.name)) {
+	/* wl_surface.damage_buffer is from version 4, the pointer's and keyboard's
+	 * release from wl_seat 3: older ones are not taken. */
+	if (!strcmp(iface, wl_compositor_interface.name) && ver >= 4) {
 		compositor = wl_registry_bind(r, name, &wl_compositor_interface,
 			MIN(ver, 6));
 	} else if (!strcmp(iface, wl_shm_interface.name)) {
 		shm = wl_registry_bind(r, name, &wl_shm_interface, 1);
-	} else if (!strcmp(iface, wl_seat_interface.name) && !seat) {
+	} else if (!strcmp(iface, wl_seat_interface.name) && !seat && ver >= 3) {
 		seat = wl_registry_bind(r, name, &wl_seat_interface, MIN(ver, 7));
+		seat_global = name;
 		wl_seat_add_listener(seat, &seat_listener, NULL);
 	} else if (!strcmp(iface, xdg_wm_base_interface.name)) {
 		wm_base = wl_registry_bind(r, name, &xdg_wm_base_interface,
@@ -1055,8 +1068,17 @@ static void registry_global(void *data, struct wl_registry *r, uint32_t name,
 	}
 }
 
+/* A seat that goes is let go of, so that the next one announced is taken. */
 static void registry_remove(void *data, struct wl_registry *r, uint32_t name)
 {
+	if (!seat || name != seat_global)
+		return;
+	seat_capabilities(NULL, seat, 0);
+	if (wl_seat_get_version(seat) >= WL_SEAT_RELEASE_SINCE_VERSION)
+		wl_seat_release(seat);
+	else
+		wl_seat_destroy(seat);
+	seat = NULL;
 }
 
 static const struct wl_registry_listener registry_listener = {
@@ -1200,7 +1222,7 @@ static void lost_connection(void)
 int main(int argc, char **argv)
 {
 	if (argc > 1) {
-		if (!strcmp(argv[1], "-v")) {
+		if (argc == 2 && !strcmp(argv[1], "-v")) {
 			printf("deskControl %s\n", DESKCONTROL_VERSION);
 			return 0;
 		}
@@ -1225,8 +1247,8 @@ int main(int argc, char **argv)
 	if (wl_display_roundtrip(dpy) < 0)
 		lost_connection();
 	if (!compositor || !shm || !wm_base) {
-		fprintf(stderr, "deskControl: the compositor lacks wl_compositor, wl_shm "
-			"or xdg_wm_base\n");
+		fprintf(stderr, "deskControl: the compositor lacks wl_compositor 4, "
+			"wl_shm or xdg_wm_base\n");
 		return 1;
 	}
 	if (!ws_mgr) {

@@ -13,7 +13,9 @@ to the one below.
 
 Only the first nine desktops have a number key, and at most 32 get a button.
 
-There is no output scale: on a scaled output the window is scaled up and blurred.
+It draws at the integer scale the compositor asks for with wl_compositor 6. A
+fractional scale is drawn at the next integer and scaled down by the compositor; an
+older compositor never asks, and there the window stays at scale 1 and is blurred.
 
 
 ## Tests

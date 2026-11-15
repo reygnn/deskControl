@@ -105,6 +105,25 @@ fi
 face_is "desktop 1 is shown as the current one" 1 $SEL
 face_is "the others are not" 3 $BG
 
+# The label on the active colour, a mid-tone: black reads better on it than white.
+# Counted inside the bevel, whose light half is near white.
+ink_is() { # description button rrggbb-wanted rrggbb-not
+	local yes= no= i
+	for ((i = 0; i < 30; i++)); do
+		if WAYLAND_DISPLAY=wayland-0 grim "$SHOT" 2>/dev/null; then
+			yes=$(build/pngtool count "$SHOT" $(($(bx "$2") + 3)) $(($(by "$2") + 3)) \
+				$((BW - 6)) $((BH - 6)) "$3")
+			no=$(build/pngtool count "$SHOT" $(($(bx "$2") + 3)) $(($(by "$2") + 3)) \
+				$((BW - 6)) $((BH - 6)) "$4")
+			[ "$yes" -gt 0 ] && [ "$no" = 0 ] && { echo "ok: $1"; return 0; }
+		fi
+		sleep 0.1
+	done
+	cp "$SHOT" "$ERR_SHOT" 2>/dev/null
+	fail "$1: button $2 has $yes pixels near $3 and $no near $4 (screenshot in $ERR_SHOT)"
+}
+ink_is "the current desktop's label is black" 1 000000 ffffff
+
 # ---- the mouse ----------------------------------------------------------------------
 
 do_input move "$(cx 2)" "$(cy 2)"
@@ -197,6 +216,32 @@ kill -0 "$PID_dc" 2>/dev/null && fail "q doesn't quit"
 wait "$PID_dc"
 [ $? = 0 ] || fail "deskControl didn't exit with 0"
 echo "ok: q quits"
+
+# ---- a scaled output ---------------------------------------------------------------------
+
+# At scale 2 it draws twice the pixels: the first one of the face beside the bevel is
+# the face's colour, not a blend of the two from a buffer scaled up.
+printf 'Mwm*deskControl*allDesktops: true\nMwm*deskControl*geometry: -0+0\n' \
+	>"$XDG_CONFIG_HOME/mwc/mwmrc"
+echo 'Mwm*HEADLESS-1*outputScale: 2' >>"$XDG_CONFIG_HOME/mwc/mwmrc"
+reload_mwc
+check "the output is scaled" "[ \"\$(global output_HEADLESS-1 scale)\" = 200 ]"
+WAYLAND_DISPLAY=wayland-0 "$DC" >>"$DC_LOG" 2>&1 &
+PID_dc=$!
+check "deskControl is mapped again" "[ -n \"\$(get deskControl x)\" ]"
+X0=$(get deskControl x) Y0=$(get deskControl y)
+sharp=
+for ((i = 0; i < 30; i++)); do
+	WAYLAND_DISPLAY=wayland-0 grim "$SHOT" 2>/dev/null &&
+		sharp=$(build/pngtool pixel "$SHOT" $((2 * ($(bx 1) + 2))) $((2 * $(cy 1))))
+	[ "$sharp" = $SEL ] && break
+	sleep 0.1
+done
+[ "$sharp" = $SEL ] || { cp "$SHOT" "$ERR_SHOT" 2>/dev/null
+	fail "at scale 2 the face beside the bevel is $sharp, not $SEL (screenshot in $ERR_SHOT)"; }
+echo "ok: sharp at scale 2"
+kill "$PID_dc"
+wait "$PID_dc" 2>/dev/null
 [ "$("$DC" -v)" = "deskControl $(sed -n 's/^#define DESKCONTROL_VERSION "\(.*\)"/\1/p' "$DC_DIR/version.h")" ] ||
 	fail "-v: $("$DC" -v)"
 echo "ok: -v prints the version"

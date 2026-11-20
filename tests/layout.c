@@ -7,6 +7,7 @@
 #include "../dc.c"
 #undef main
 #include <sys/stat.h>
+#include <sys/wait.h>
 
 static int failed;
 
@@ -272,6 +273,41 @@ int main(void)
 	seats_remove(&l, 20);
 	expect(seats_add(&l, 99, 1) && l.name[MAX_SEATS - 1] == 99,
 		"one gone: room for the next, at the end");
+
+	/* Without a button the placeholder spans the inside, and text_centred() cuts
+	 * what is wider than that: the window must be wide enough for all of it. */
+	theme_init();
+	for (int list = 0; list < 2; list++) {
+		desktops(0);
+		have_list = list;
+		layout();
+		int maxw = W - 2 * FRAME - 2 * BEV - 4;
+		char what[80];
+		snprintf(what, sizeof what, "\"%s\" fits: %d of %d", placeholder(),
+			textw(placeholder()), maxw);
+		expect(textw(placeholder()) <= maxw, what);
+	}
+	expect(!strcmp(placeholder(), "no desktops"), "with the list: no desktops");
+
+	/* A failed poll() records nothing in libwayland: its own errno is the cause. */
+	int fds[2];
+	fflush(stdout);         /* the child's exit() must not write it again */
+	if (pipe(fds) == 0) {
+		pid_t pid = fork();
+		if (pid == 0) {
+			dup2(fds[1], 2);
+			lost_connection_err(ENOMEM);
+		}
+		close(fds[1]);
+		char out[200] = "";
+		ssize_t got = read(fds[0], out, sizeof out - 1);
+		out[got > 0 ? got : 0] = 0;
+		close(fds[0]);
+		int st = 0;
+		waitpid(pid, &st, 0);
+		expect(WIFEXITED(st) && WEXITSTATUS(st) == 1 &&
+			strstr(out, strerror(ENOMEM)), "a failed poll() names its own cause");
+	}
 
 	puts(failed ? "FAIL: layout" : "PASS: layout");
 	return failed;

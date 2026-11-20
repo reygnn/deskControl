@@ -5,7 +5,7 @@
 #
 # Needs a built mwc with build/vinput, build/pngtool, build/workspacec and build/xdgc
 # in MWC_DIR (by default ../mwc), and grim. Output goes to
-# build/ui.log, deskControl's own to build/ui-deskControl.log, the compositor's to
+# build/ui.log, deskControl's own to build/ui-deskControl.log, its protocol log to
 # build/ui-wayland.log.
 DC_DIR=$(cd "$(dirname "$0")/.." && pwd)
 DC=${DC:-$DC_DIR/deskControl}
@@ -221,11 +221,12 @@ face_is "deskControl follows" 3 $SEL
 face_is "and 1 is out" 1 $BG
 
 # A dialog opening for a window on desktop 1, while 3 is current: 1 wants attention.
+do_input key 1
+current_is "back to 1 for the window to open there" 1
+# Only now: mwc puts a new window on the desktop current when it maps.
 WAYLAND_DISPLAY=wayland-0 build/xdgc app=late size=200x150 dialog=latekid \
 	dialog_after="$SMOKE_DIR/latekid" >"$SMOKE_DIR/late.log" 2>&1 &
 PID_late=$!
-do_input key 1
-current_is "back to 1 for the window to open there" 1
 check "the window is there" "[ \"\$(get late desktop)\" = 1 ]"
 do_input move "$(cx 3)" "$(cy 3)"
 do_input click left
@@ -237,7 +238,11 @@ face_is "3 stays the current one" 3 $SEL
 do_input move "$(cx 1)" "$(cy 1)"
 do_input click left
 current_is "going there" 1
-face_is "takes the mark away" 1 $SEL
+face_is "1 is current" 1 $SEL
+# The current colour covers the mark: away from it again to see it gone.
+WAYLAND_DISPLAY=wayland-0 build/workspacec activate 3 >/dev/null || fail "switching from outside"
+current_is "and away to 3" 3
+face_is "the visit took the mark away" 1 $BG
 kill "$PID_late" 2>/dev/null
 wait "$PID_late" 2>/dev/null
 
@@ -373,7 +378,25 @@ cursor_kept() {
 		if (cur != "" && att[cur] == f[2]) print f[2]
 	}' "$WL_LOG"
 }
-gone() { grep -c 'wl_buffer#[0-9]*\.destroy()' "$WL_LOG"; }
+# Destroyed buffers that a cursor surface ever showed: the themes', not the window's.
+gone() {
+	awk '
+	FNR == NR {
+		if (match($0, /wl_pointer#[0-9]+\.set_cursor\([0-9]+, wl_surface#[0-9]+/)) {
+			split(substr($0, RSTART, RLENGTH), f, /[#(, ]+/); cs[f[5]] = 1
+		}
+		next
+	}
+	match($0, /wl_surface#[0-9]+\.attach\(wl_buffer#[0-9]+/) {
+		split(substr($0, RSTART, RLENGTH), f, /[#.()]+/)
+		if (f[2] in cs) shown[f[5]] = 1
+	}
+	match($0, /wl_buffer#[0-9]+\.destroy\(\)/) {
+		split(substr($0, RSTART, RLENGTH), f, /[#.()]+/)
+		if (f[2] in shown) n++
+	}
+	END { print n + 0 }' "$WL_LOG" "$WL_LOG"
+}
 [ "$(gone)" -gt 0 ] || fail "the theme for scale 4 was not let go of"
 [ -z "$(cursor_kept)" ] || fail "with the pointer on it, a shown buffer was destroyed: $(cursor_kept)"
 echo "ok: with the pointer on it, the new cursor is shown before the old theme goes"

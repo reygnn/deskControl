@@ -504,6 +504,13 @@ static int textw(const char *s)
 	return w;
 }
 
+/* What the window says while it has no button: "..." until the compositor's list
+ * has come, then why it is empty. */
+static const char *placeholder(void)
+{
+	return have_list ? "no desktops" : "...";
+}
+
 /* s centred in r, at most its width (with "..." at the end if it is longer). */
 static void text_centred(uint32_t c, struct rect r, int off, const char *s)
 {
@@ -530,6 +537,9 @@ static void layout(void)
 	btn_w = barh * 3 / 2;
 	for (int i = 0; i < n_ws; i++)
 		btn_w = MAX(btn_w, textw(wss[i]->name) + 2 * BEV + 2 * PAD);
+	/* Without buttons the placeholder is drawn over the whole inside: room for it. */
+	if (!n_ws)
+		btn_w = MAX(btn_w, textw(placeholder()) + 2 * BEV + 4 - 2 * PAD);
 	int n = MAX(n_ws, 1);
 	int rows = ROWS, cols = (n + ROWS - 1) / ROWS;
 	int want_w = 2 * (FRAME + PAD) + cols * btn_w + (cols - 1) * GAP;
@@ -577,8 +587,7 @@ static void paint(void)
 	draw_frame();
 	if (!n_ws) {
 		struct rect all = { FRAME, FRAME, W - 2 * FRAME, H - 2 * FRAME };
-		text_centred(have_list ? xc_err : xc_dim, all, 0,
-			have_list ? "no desktops" : "...");
+		text_centred(have_list ? xc_err : xc_dim, all, 0, placeholder());
 		return;
 	}
 	for (int i = 0; i < n_ws; i++) {
@@ -1402,11 +1411,18 @@ static void setup_window(void)
 
 /* ---- main loop ---------------------------------------------------------- */
 
-static void lost_connection(void)
+/* err is the cause, or 0 for the one libwayland recorded: a failed poll() leaves
+ * none there. */
+static void lost_connection_err(int err)
 {
 	fprintf(stderr, "deskControl: lost the connection to the compositor: %s\n",
-		strerror(wl_display_get_error(dpy)));
+		strerror(err ? err : wl_display_get_error(dpy)));
 	exit(1);
+}
+
+static void lost_connection(void)
+{
+	lost_connection_err(0);
 }
 
 int main(int argc, char **argv)
@@ -1483,8 +1499,9 @@ int main(int argc, char **argv)
 				pfd.events |= POLLOUT;
 		}
 		if (poll(&pfd, 1, -1) < 0 && errno != EINTR) {
+			int err = errno;
 			wl_display_cancel_read(dpy);
-			lost_connection();
+			lost_connection_err(err);
 		}
 		if (pfd.revents & (POLLIN | POLLERR | POLLHUP)) {
 			if (wl_display_read_events(dpy) < 0)

@@ -72,12 +72,15 @@ Keys do not repeat. Desktops the compositor marks hidden get no button.
 
 | Variable | Default | |
 |---|---|---|
-| `DC_FONT` | `Sans 10` | Pango font name, e.g. `Sans Bold 11` |
 | `MWC_INACTIVE`, `MWC_ACTIVE` | `#aeb2c3`, `#7387ad` | background, current desktop and border with the keyboard |
 
 Without the variables it reads `Mwm*background` and `Mwm*activeBackground` from
 `~/.config/mwc/mwmrc`, else the Motif defaults. The labels take `Mwm*foreground` and
 `Mwm*activeForeground` from there, else black or white, whichever reads better.
+
+The font is fixed as DejaVu Sans 10, the same in deskControl, pulseControl, osDisplay
+and digitalClock, so the four are as high as each other in the dock. Without it
+fontconfig picks another font, and deskControl says so on stderr.
 
 
 ## How this is built

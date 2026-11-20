@@ -24,7 +24,9 @@ done
 
 export MWC_TEST_STATE=$SMOKE_DIR/state
 export LC_ALL=C.UTF-8
-unset MWC_INACTIVE MWC_ACTIVE DC_FONT
+unset MWC_INACTIVE MWC_ACTIVE
+# The font is fixed: the variable it once came from must change nothing.
+export DC_FONT="Sans 20"
 : >"$DC_LOG"
 SHOT=$SMOKE_DIR/ui.png
 ERR_SHOT=$DC_DIR/build/ui-last.png
@@ -59,6 +61,9 @@ BW=$(((CW - 2 * IN - 4) / 2)) BH=$(((CH - 2 * IN - 4) / 2))
 [ "$BW" -gt 10 ] && [ "$BH" -gt 10 ] || fail "four buttons don't fit in ${CW}x$CH"
 [ "$BW" -gt "$BH" ] || fail "${CW}x$CH is not two buttons wide and two high"
 echo "ok: four buttons in two rows, ${BW}x$BH"
+# DejaVu Sans 10 at 96 dpi: ascent 13 and descent 4, plus 10. Sans 20 would give more.
+[ "$BH" = 27 ] || fail "buttons are $BH high, not 27 for DejaVu Sans 10"
+echo "ok: the font is DejaVu Sans 10, whatever DC_FONT says"
 bx() { echo $((X0 + IN + ($1 - 1) % 2 * (BW + 4))); }
 by() { echo $((Y0 + IN + ($1 - 1) / 2 * (BH + 4))); }
 cx() { echo $(($(bx "$1") + BW / 2)); }
@@ -406,6 +411,21 @@ for a in "-v junk" "-h junk" "--help" "-x"; do
 	"$DC" $a 2>/dev/null && fail "$a: exit 0"
 	echo "ok: $a is refused"
 done
+
+# Without DejaVu Sans fontconfig takes another font; deskControl says so.
+MONO=$(fc-list -f '%{file}\n' | grep -m1 '/DejaVuSansMono\.ttf$')
+[ -n "$MONO" ] || fail "no DejaVuSansMono.ttf for the missing-font test"
+mkdir -p "$SMOKE_DIR/monofont"
+ln -sf "$MONO" "$SMOKE_DIR/monofont/"
+printf '<?xml version="1.0"?>\n<fontconfig><dir>%s</dir><cachedir>%s</cachedir></fontconfig>\n' \
+	"$SMOKE_DIR/monofont" "$SMOKE_DIR/fccache" >"$SMOKE_DIR/fonts.conf"
+FONTCONFIG_FILE=$SMOKE_DIR/fonts.conf WAYLAND_DISPLAY=wayland-0 "$DC" \
+	>"$SMOKE_DIR/nofont.log" 2>&1 &
+PID_dc=$!
+check "a missing DejaVu Sans is reported" \
+	"grep -q 'font DejaVu Sans not found' \"$SMOKE_DIR/nofont.log\""
+kill "$PID_dc"
+wait "$PID_dc" 2>/dev/null
 
 kill -0 "$pid" || fail "mwc died"
 stop_vinput

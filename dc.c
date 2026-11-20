@@ -68,7 +68,8 @@ struct rect { int x, y, w, h; };
 struct ws {
 	struct ext_workspace_handle_v1 *handle;
 	char name[64];
-	int coord, has_coord;
+	uint32_t x, y;      /* its coordinates, if it has them; y is 0 in one dimension */
+	int has_coord;
 	int seq;            /* the order they came in, for those without coordinates */
 	uint32_t state;
 	uint32_t caps;
@@ -635,12 +636,15 @@ static int draw(void)
 
 static int by_place(const void *a, const void *b)
 {
-	const struct ws *x = *(struct ws *const *)a, *y = *(struct ws *const *)b;
-	if (x->has_coord != y->has_coord)
-		return y->has_coord - x->has_coord;
-	if (x->has_coord && x->coord != y->coord)
-		return (x->coord > y->coord) - (x->coord < y->coord);
-	return (x->seq > y->seq) - (x->seq < y->seq);
+	const struct ws *p = *(struct ws *const *)a, *q = *(struct ws *const *)b;
+	if (p->has_coord != q->has_coord)
+		return q->has_coord - p->has_coord;
+	/* Row by row: in two dimensions the first is x, the second y. */
+	if (p->has_coord && p->y != q->y)
+		return (p->y > q->y) - (p->y < q->y);
+	if (p->has_coord && p->x != q->x)
+		return (p->x > q->x) - (p->x < q->x);
+	return (p->seq > q->seq) - (p->seq < q->seq);
 }
 
 static int current(void)
@@ -657,10 +661,16 @@ static int read_only(void)
 	return n_ws == 1;
 }
 
+/* Whether the compositor lets button i be switched to. */
+static int switchable(int i)
+{
+	return i >= 0 && i < n_ws && !read_only() &&
+		(wss[i]->caps & EXT_WORKSPACE_HANDLE_V1_WORKSPACE_CAPABILITIES_ACTIVATE);
+}
+
 static void activate(int i)
 {
-	if (i < 0 || i >= n_ws || read_only() || !ws_mgr ||
-	    !(wss[i]->caps & EXT_WORKSPACE_HANDLE_V1_WORKSPACE_CAPABILITIES_ACTIVATE))
+	if (!switchable(i) || !ws_mgr)
 		return;
 	if (wss[i]->state & EXT_WORKSPACE_HANDLE_V1_STATE_ACTIVE)
 		return;
@@ -668,11 +678,27 @@ static void activate(int i)
 	ext_workspace_manager_v1_commit(ws_mgr);
 }
 
-/* The one d places before or after the current one, stopping at the ends. */
-static void step(int d)
+/* The first button after from in direction d that can be switched to, or -1:
+ * one that can't is passed over, not a wall. */
+static int next_switchable(int from, int d)
+{
+	for (int i = from + d; i >= 0 && i < n_ws; i += d)
+		if (switchable(i))
+			return i;
+	return -1;
+}
+
+/* The next one before or after the current one, stopping at the ends; without a
+ * current one, the first or the last. */
+static int step_target(int d)
 {
 	int c = current();
-	activate(c < 0 ? (d > 0 ? 0 : n_ws - 1) : MAX(MIN(c + d, n_ws - 1), 0));
+	return next_switchable(c >= 0 ? c : d > 0 ? -1 : n_ws, d);
+}
+
+static void step(int d)
+{
+	activate(step_target(d));
 }
 
 static void ws_id(void *data, struct ext_workspace_handle_v1 *h, const char *id)
@@ -697,9 +723,10 @@ static void ws_coordinates(void *data, struct ext_workspace_handle_v1 *h,
 	struct wl_array *coordinates)
 {
 	struct ws *w = data;
-	w->has_coord = coordinates->size >= sizeof(uint32_t);
-	if (w->has_coord)
-		w->coord = *(uint32_t *)coordinates->data;
+	const uint32_t *c = coordinates->data;
+	w->has_coord = coordinates->size >= sizeof *c;
+	w->x = w->has_coord ? c[0] : 0;
+	w->y = coordinates->size >= 2 * sizeof *c ? c[1] : 0;
 }
 
 static void ws_state(void *data, struct ext_workspace_handle_v1 *h, uint32_t state)
@@ -884,10 +911,10 @@ static void key_action(xkb_keysym_t ks)
 		step(1);
 		break;
 	case XKB_KEY_Home: case XKB_KEY_KP_Home:
-		activate(0);
+		activate(next_switchable(-1, 1));
 		break;
 	case XKB_KEY_End: case XKB_KEY_KP_End:
-		activate(n_ws - 1);
+		activate(next_switchable(n_ws, -1));
 		break;
 	case XKB_KEY_q: case XKB_KEY_Q: case XKB_KEY_Escape:
 		exit(0);
@@ -1016,7 +1043,8 @@ static void ptr_button(void *data, struct wl_pointer *p, uint32_t serial,
 		return;
 	int at = button_at(ptr_x, ptr_y);
 	if (state == WL_POINTER_BUTTON_STATE_PRESSED) {
-		armed = read_only() || at < 0 ? NULL : wss[at];
+		/* Not pushed in where the release can't switch. */
+		armed = switchable(at) ? wss[at] : NULL;
 		dirty = 1;
 		return;
 	}

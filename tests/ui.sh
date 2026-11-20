@@ -92,6 +92,18 @@ face_is() { # description button rrggbb
 current_is() { # description n
 	check "$1" "[ \"\$(global desktop current)\" = $2 ] && [ \"\$(get deskControl visible)\" = 1 ]"
 }
+# That nothing happens can't be polled for: it stays n for half a second, looked at
+# all along, not only at its end.
+stays_at() { # description n
+	local i got
+	for ((i = 0; i < 10; i++)); do
+		refresh
+		got=$(global desktop current)
+		[ "$got" = "$2" ] || fail "$1: desktop $got, expected $2"
+		sleep 0.05
+	done
+	echo "ok: $1"
+}
 
 # Its frame: a bevel of 2, then a line of the face, active while it has the keyboard.
 frame_is() { # description rrggbb
@@ -152,13 +164,13 @@ do_input click left
 current_is "a click on 2 switches there, and deskControl stays in sight" 2
 face_is "and shows it" 2 $SEL
 face_is "1 is out again" 1 $BG
-# A press that leaves the button before the release does nothing.
-do_input move "$(cx 3)" "$(cy 3)"
+# A press that leaves the button before the release does nothing. On 4, not on 3,
+# where the next step goes: a late switch would not pass for that one.
+do_input move "$(cx 4)" "$(cy 4)"
 do_input down left
-do_input move "$(cx 3)" $((Y0 + CH + 40))
+do_input move "$(cx 4)" $((Y0 + CH + 40))
 do_input up left
-sleep 0.3
-current_is "pressed and dragged off, nothing changes" 2
+stays_at "pressed and dragged off, nothing changes" 2
 # Dragged back onto it, the press counts again, as on a Motif push button.
 do_input move "$(cx 3)" "$(cy 3)"
 do_input down left
@@ -196,15 +208,13 @@ wait "$PID_thief" 2>/dev/null
 do_input key 4
 current_is "4 goes to desktop 4" 4
 do_input key Right
-sleep 0.2
-current_is "Right at the last one stays there" 4
+stays_at "Right at the last one stays there" 4
 do_input key Left
 current_is "Left goes to the one before" 3
 do_input key 1
 current_is "1 to the first" 1
 do_input key alt+3
-sleep 0.2
-current_is "Alt+3 is not 3" 1
+stays_at "Alt+3 is not 3" 1
 do_input key End
 current_is "End to the last" 4
 do_input key Home
@@ -216,8 +226,7 @@ current_is "Up to the one before" 1
 # At the ends the wheel stops, and a turn the other way still works after it.
 do_input move "$(cx 1)" "$(cy 1)"
 do_input wheel -1
-sleep 0.2
-current_is "the wheel up at the first one stays there" 1
+stays_at "the wheel up at the first one stays there" 1
 do_input wheel 1
 current_is "and down from there goes on" 2
 

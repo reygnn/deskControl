@@ -109,8 +109,8 @@ int main(void)
 	r = wss[1]->r;
 	left_down(r.x + r.w / 2, r.y + r.h / 2);
 	for (int i = 0; i < 4; i++)
-		pool[i].has_coord = 1, pool[i].coord = i;
-	pool[1].coord = 9;
+		pool[i].has_coord = 1, pool[i].x = i;
+	pool[1].x = 9;
 	mgr_done(NULL, NULL);
 	layout();
 	expect(armed == &pool[1] && wss[3] == &pool[1], "re-sorted: the press stays on 2");
@@ -125,6 +125,43 @@ int main(void)
 	pool[2].state = 0;
 	mgr_done(NULL, NULL);
 	expect(n_ws == 4 && wss[2] == &pool[2], "shown again, it is back in its place");
+
+	/* A 2x2 grid, announced row by row: (0,0) (1,0) (0,1) (1,1). The buttons
+	 * follow it, 1 2 over 3 4, not column by column. */
+	desktops(4);
+	for (int i = 0; i < 4; i++)
+		pool[i].has_coord = 1, pool[i].x = i % 2, pool[i].y = i / 2;
+	mgr_done(NULL, NULL);
+	layout();
+	expect(wss[0] == &pool[0] && wss[1] == &pool[1] && wss[2] == &pool[2] &&
+		wss[3] == &pool[3], "a 2x2 grid keeps its rows");
+	pool[0].x = 1, pool[1].x = 0;
+	mgr_done(NULL, NULL);
+	expect(wss[0] == &pool[1] && wss[1] == &pool[0], "and x orders within a row");
+
+	/* 3 of 5 can't be switched to: the arrows and Home/End pass over it, a press
+	 * on it is not taken. */
+	desktops(5);
+	pool[2].caps = 0;
+	expect(step_target(1) == 1, "from 1 the next is 2");
+	pool[0].state = 0;
+	pool[1].state = EXT_WORKSPACE_HANDLE_V1_STATE_ACTIVE;
+	expect(step_target(1) == 3, "from 2 Right passes over 3 to 4");
+	pool[1].state = 0;
+	pool[3].state = EXT_WORKSPACE_HANDLE_V1_STATE_ACTIVE;
+	expect(step_target(-1) == 1, "from 4 Left passes over 3 to 2");
+	pool[3].state = 0;
+	pool[4].state = EXT_WORKSPACE_HANDLE_V1_STATE_ACTIVE;
+	expect(step_target(1) == -1, "at the last one Right stops");
+	pool[0].caps = pool[4].caps = 0;
+	expect(next_switchable(-1, 1) == 1 && next_switchable(n_ws, -1) == 3,
+		"Home and End to the first and last that can be switched to");
+	pool[4].state = 0;
+	expect(step_target(1) == 1 && step_target(-1) == 3,
+		"none current: the first or the last that can be");
+	r = wss[2]->r;
+	expect(left_click(r.x + r.w / 2, r.y + r.h / 2) == -1,
+		"a press on one that can't be switched to is not taken");
 
 	expect(rgb("rgb:ff/80/0") == 0xff8000, "rgb:ff/80/0");
 	expect(rgb("rgb:ffff/0/0") == 0xff0000, "rgb: 4 digits");

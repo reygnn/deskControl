@@ -99,8 +99,8 @@ and their parsing without a compositor, and then deskControl in a headless mwc w
 simulated mouse and keyboard and checks its border and focus, the layout, switching by
 click, wheel and keys, following a switch from outside, the attention mark, quitting,
 the sharpness at scale 2, the cursor at scales 4 and 2, and `-v`. It needs a built mwc with
-`build/vinput`, `build/pngtool`, `build/workspacec`, `build/xclient` and `build/xdgc`
-in `MWC_DIR` (by default `../mwc`), grim and Xwayland. mwc's development box has all
+`build/vinput`, `build/pngtool`, `build/workspacec` and `build/xdgc` in `MWC_DIR`
+(by default `../mwc`), and grim. mwc's development box has all
 of it:
 
     distrobox enter mwc-dev -- make test

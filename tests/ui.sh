@@ -3,8 +3,8 @@
 # What it switches is read from mwc's state file, what it shows from screenshots.
 # It has its own sockets and touches no running session.
 #
-# Needs a built mwc with build/vinput, build/pngtool, build/workspacec, build/xclient
-# and build/xdgc in MWC_DIR (by default ../mwc), grim and Xwayland. Output goes to
+# Needs a built mwc with build/vinput, build/pngtool, build/workspacec and build/xdgc
+# in MWC_DIR (by default ../mwc), and grim. Output goes to
 # build/ui.log, deskControl's own to build/ui-deskControl.log, the compositor's to
 # build/ui-wayland.log.
 DC_DIR=$(cd "$(dirname "$0")/.." && pwd)
@@ -17,8 +17,8 @@ MWC_DIR=${MWC_DIR:-$DC_DIR/../mwc}
 mkdir -p "$DC_DIR/build"
 cd "$MWC_DIR" || exit 1
 . tests/lib.sh
-require_tools grim Xwayland
-for tool in build/vinput build/pngtool build/workspacec build/xclient build/xdgc; do
+require_tools grim
+for tool in build/vinput build/pngtool build/workspacec build/xdgc; do
 	[ -x "$tool" ] || { echo "FAIL: $MWC_DIR/$tool not built (make $tool)"; exit 1; }
 done
 
@@ -37,9 +37,7 @@ URGENT=e7a53b  # the background mixed 70 % towards amber
 mkdir -p "$XDG_CONFIG_HOME/mwc"
 printf 'Mwm*deskControl*allDesktops: true\nMwm*deskControl*geometry: -0+0\n' \
 	>"$XDG_CONFIG_HOME/mwc/mwmrc"
-start_mwc 'echo "$DISPLAY" > "$SMOKE_DIR/display"; exec sleep 300'
-wait_for "the startup command ran" test -s "$SMOKE_DIR/display"
-X_DISPLAY=$(cat "$SMOKE_DIR/display")
+start_mwc 'exec sleep 300'
 start_vinput
 refresh
 
@@ -223,8 +221,8 @@ face_is "deskControl follows" 3 $SEL
 face_is "and 1 is out" 1 $BG
 
 # A dialog opening for a window on desktop 1, while 3 is current: 1 wants attention.
-DISPLAY=$X_DISPLAY build/xclient class=late size=200x150 dialog=latekid dialog_ms=2500 \
-	>"$SMOKE_DIR/late.log" 2>&1 &
+WAYLAND_DISPLAY=wayland-0 build/xdgc app=late size=200x150 dialog=latekid \
+	dialog_after="$SMOKE_DIR/latekid" >"$SMOKE_DIR/late.log" 2>&1 &
 PID_late=$!
 do_input key 1
 current_is "back to 1 for the window to open there" 1
@@ -232,6 +230,7 @@ check "the window is there" "[ \"\$(get late desktop)\" = 1 ]"
 do_input move "$(cx 3)" "$(cy 3)"
 do_input click left
 current_is "and away to 3 again" 3
+touch "$SMOKE_DIR/latekid"
 check "its dialog came, on desktop 1" "[ \"\$(get latekid desktop)\" = 1 ] && [ \"\$(get latekid visible)\" = 0 ]"
 face_is "desktop 1 is marked" 1 $URGENT
 face_is "3 stays the current one" 3 $SEL

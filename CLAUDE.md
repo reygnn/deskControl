@@ -6,8 +6,8 @@ Project rules. Everything else: see the global CLAUDE.md, section "C projects".
 ## Build and test
 
 `make` builds on the host. `make test` needs a built mwc (by default `../mwc`, else
-`MWC_DIR`) with `build/vinput`, `build/pngtool`, `build/workspacec`, `build/xclient`
-and `build/xdgc`, plus grim and Xwayland; run it in mwc's box:
+`MWC_DIR`) with `build/vinput`, `build/pngtool`, `build/workspacec` and
+`build/xdgc`, plus grim; run it in mwc's box:
 `distrobox enter mwc-dev -- bash -lc 'cd ~/data/C-Projects/deskControl && make test'`.
 
 | Target | |

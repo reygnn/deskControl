@@ -94,13 +94,13 @@ Testing. Known limits are written down in CAVEATS.
 
     make test
 
-runs `make layout-test`, the layout for one to five desktops, the press, the colours
-and their parsing without a compositor, and then deskControl in a headless mwc with a
-simulated mouse and keyboard and checks its border and focus, the layout, switching by
-click, wheel and keys, following a switch from outside, the attention mark, quitting,
-the sharpness at scale 2, the cursor at scales 4 and 2, and `-v`. It needs a built mwc with
-`build/vinput`, `build/pngtool`, `build/workspacec` and `build/xdgc` in `MWC_DIR`
-(by default `../mwc`), and grim. mwc's development box has all
-of it:
+runs `make layout-test`, the layout for one to five desktops, the press, the colours and
+their parsing, the scale limit and the list of seats without a compositor, and then
+deskControl in a headless mwc with a simulated mouse and keyboard and checks its border
+and focus, the layout, switching by click, wheel and keys, following a switch from
+outside, the attention mark, quitting, the sharpness at scale 2, the cursor at scales 4
+and 2, and `-v`. It needs a built mwc with `build/vinput`, `build/pngtool`,
+`build/workspacec` and `build/xdgc` in `MWC_DIR` (by default `../mwc`), and grim. mwc's
+development box has all of it:
 
     distrobox enter mwc-dev -- make test

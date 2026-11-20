@@ -406,6 +406,12 @@ echo "ok: -v prints the version"
 echo "ok: -h prints the usage on stdout and exits 0"
 [ -z "$("$DC" -x 2>/dev/null)" ] || fail "-x: the usage went to stdout"
 echo "ok: a refused argument's usage goes to stderr"
+# Fully buffered, a failed write shows only at the flush: not an exit 0.
+for a in -v -h; do
+	"$DC" $a >/dev/full 2>/dev/null && fail "$a: exit 0 on a full disk"
+	"$DC" $a >&- 2>/dev/null && fail "$a: exit 0 without stdout"
+	echo "ok: $a fails when stdout can't be written"
+done
 for a in "-v junk" "-h junk" "--help" "-x"; do
 	"$DC" $a 2>/dev/null && fail "$a: exit 0"
 	echo "ok: $a is refused"

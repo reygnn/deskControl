@@ -218,6 +218,35 @@ int main(void)
 	expect(cursor_size() == 24, "XCURSOR_SIZE not a number: 24");
 	unsetenv("XCURSOR_SIZE");
 
+	/* At most 16: the window's and the cursor's sizes times it stay in an int. */
+	expect(buffer_scale(0) == 0 && buffer_scale(-3) == 0, "a scale below 1 is ignored");
+	expect(buffer_scale(1) == 1 && buffer_scale(16) == 16, "scales 1 to 16 are kept");
+	expect(buffer_scale(17) == 16 && buffer_scale(INT32_MAX) == 16, "larger ones are 16");
+
+	/* Headless mwc has one seat: the list alone, not the binding. */
+	struct seats l = { 0 };
+	uint32_t name, ver;
+	expect(!seats_next(&l, &name, &ver), "no seat: none to take");
+	seats_add(&l, 10, 7);
+	seats_add(&l, 11, 5);
+	seats_add(&l, 12, 9);
+	expect(seats_next(&l, &name, &ver) && name == 10 && ver == 7, "the oldest seat first");
+	seats_remove(&l, 99);
+	expect(l.n == 3, "another global going leaves the seats");
+	seats_remove(&l, 10);
+	expect(seats_next(&l, &name, &ver) && name == 11 && ver == 5,
+		"the first one gone: the next oldest");
+	seats_remove(&l, 12);
+	expect(seats_next(&l, &name, &ver) && name == 11 && l.n == 1, "one from the end goes");
+	seats_remove(&l, 11);
+	expect(!seats_next(&l, &name, &ver), "all gone: none to take");
+	for (uint32_t i = 0; i < MAX_SEATS; i++)
+		seats_add(&l, 20 + i, 1);
+	expect(!seats_add(&l, 99, 1) && l.n == MAX_SEATS, "a full list keeps no more");
+	seats_remove(&l, 20);
+	expect(seats_add(&l, 99, 1) && l.name[MAX_SEATS - 1] == 99,
+		"one gone: room for the next, at the end");
+
 	puts(failed ? "FAIL: layout" : "PASS: layout");
 	return failed;
 }

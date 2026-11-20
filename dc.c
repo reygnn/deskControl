@@ -102,6 +102,13 @@ static struct wl_compositor *compositor;
 static struct wl_shm *shm;
 static struct wl_seat *seat;
 static uint32_t seat_global;    /* its name in the registry */
+/* The seats the compositor has announced and not removed, oldest first, by their
+ * name in the registry and version: one is bound, the others wait for it to go. */
+#define MAX_SEATS 8
+static struct seats {
+	uint32_t name[MAX_SEATS], ver[MAX_SEATS];
+	int n;
+} seats;
 static struct xdg_wm_base *wm_base;
 static struct wl_surface *surface;
 static struct wl_callback *frame;       /* a frame is on its way */
@@ -1105,6 +1112,47 @@ static void wm_ping(void *data, struct xdg_wm_base *b, uint32_t serial)
 
 static const struct xdg_wm_base_listener wm_base_listener = { wm_ping };
 
+/* A seat announced; 0 if the list is full and it is not kept. */
+static int seats_add(struct seats *l, uint32_t name, uint32_t ver)
+{
+	if (l->n == MAX_SEATS)
+		return 0;
+	l->name[l->n] = name;
+	l->ver[l->n] = ver;
+	l->n++;
+	return 1;
+}
+
+/* A global removed: dropped if it is a seat in the list. */
+static void seats_remove(struct seats *l, uint32_t name)
+{
+	for (int i = 0; i < l->n; i++)
+		if (l->name[i] == name) {
+			for (l->n--; i < l->n; i++) {
+				l->name[i] = l->name[i + 1];
+				l->ver[i] = l->ver[i + 1];
+			}
+			return;
+		}
+}
+
+/* The seat to take, the oldest left; 0 if there is none. */
+static int seats_next(const struct seats *l, uint32_t *name, uint32_t *ver)
+{
+	if (!l->n)
+		return 0;
+	*name = l->name[0];
+	*ver = l->ver[0];
+	return 1;
+}
+
+static void seat_bind(struct wl_registry *r, uint32_t name, uint32_t ver)
+{
+	seat = wl_registry_bind(r, name, &wl_seat_interface, MIN(ver, 7));
+	seat_global = name;
+	wl_seat_add_listener(seat, &seat_listener, NULL);
+}
+
 static void registry_global(void *data, struct wl_registry *r, uint32_t name,
 	const char *iface, uint32_t ver)
 {
@@ -1114,10 +1162,9 @@ static void registry_global(void *data, struct wl_registry *r, uint32_t name,
 			MIN(ver, 6));
 	} else if (!strcmp(iface, wl_shm_interface.name)) {
 		shm = wl_registry_bind(r, name, &wl_shm_interface, 1);
-	} else if (!strcmp(iface, wl_seat_interface.name) && !seat) {
-		seat = wl_registry_bind(r, name, &wl_seat_interface, MIN(ver, 7));
-		seat_global = name;
-		wl_seat_add_listener(seat, &seat_listener, NULL);
+	} else if (!strcmp(iface, wl_seat_interface.name)) {
+		if (seats_add(&seats, name, ver) && !seat)
+			seat_bind(r, name, ver);
 	} else if (!strcmp(iface, wp_viewporter_interface.name) && !viewporter) {
 		viewporter = wl_registry_bind(r, name, &wp_viewporter_interface, 1);
 	} else if (!strcmp(iface, xdg_wm_base_interface.name)) {
@@ -1130,9 +1177,11 @@ static void registry_global(void *data, struct wl_registry *r, uint32_t name,
 	}
 }
 
-/* A seat that goes is let go of, so that the next one announced is taken. */
+/* A seat that goes is let go of, and the oldest one left taken; with none, the
+ * next one announced. */
 static void registry_remove(void *data, struct wl_registry *r, uint32_t name)
 {
+	seats_remove(&seats, name);
 	if (!seat || name != seat_global)
 		return;
 	seat_capabilities(NULL, seat, 0);
@@ -1141,6 +1190,9 @@ static void registry_remove(void *data, struct wl_registry *r, uint32_t name)
 	else
 		wl_seat_destroy(seat);
 	seat = NULL;
+	uint32_t next, ver;
+	if (seats_next(&seats, &next, &ver))
+		seat_bind(r, next, ver);
 }
 
 static const struct wl_registry_listener registry_listener = {
@@ -1283,9 +1335,20 @@ static void surf_leave(void *data, struct wl_surface *s, struct wl_output *o)
 {
 }
 
+/* The buffer scale for the compositor's preferred factor: at most 16, as in
+ * pulseControl, so that the window's and the cursor's sizes times it cannot
+ * overflow; 0 for a factor below 1, which is to be ignored. */
+static int buffer_scale(int32_t factor)
+{
+	if (factor < 1)
+		return 0;
+	return factor > 16 ? 16 : factor;       /* no output is denser */
+}
+
 static void surf_preferred_scale(void *data, struct wl_surface *s, int32_t factor)
 {
-	if (factor < 1 || factor == scale)
+	factor = buffer_scale(factor);
+	if (!factor || factor == scale)
 		return;
 	scale = factor;
 	dirty = 1;
@@ -1333,15 +1396,21 @@ static void lost_connection(void)
 int main(int argc, char **argv)
 {
 	if (argc > 1) {
-		if (argc == 2 && !strcmp(argv[1], "-v")) {
-			printf("deskControl %s\n", DESKCONTROL_VERSION);
-			return 0;
-		}
+		int version = argc == 2 && !strcmp(argv[1], "-v");
 		/* Asked for, the usage goes to stdout, as mwc's; else to stderr. */
 		int help = argc == 2 && !strcmp(argv[1], "-h");
-		fprintf(help ? stdout : stderr, "usage: deskControl [-v]\n"
-			"Environment: MWC_INACTIVE, MWC_ACTIVE.\n");
-		return help ? 0 : 1;
+		if (version)
+			printf("deskControl %s\n", DESKCONTROL_VERSION);
+		else
+			fprintf(help ? stdout : stderr, "usage: deskControl [-v]\n"
+				"Environment: MWC_INACTIVE, MWC_ACTIVE.\n");
+		/* A full disk or a closed stdout is no success: fully buffered, the
+		 * write only fails here. */
+		if (fflush(stdout) == EOF || ferror(stdout)) {
+			fprintf(stderr, "deskControl: stdout: %s\n", strerror(errno));
+			return 1;
+		}
+		return version || help ? 0 : 1;
 	}
 	setlocale(LC_ALL, "");
 

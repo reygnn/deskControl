@@ -195,9 +195,35 @@ int main(void)
 	setenv("XDG_CONFIG_HOME", "/nonexistent", 1);
 	theme_init();
 	expect(xc_sel_fg == 0x000000, "without it, black on the active colour");
-	/* Amber with dim ink of its own, not the face's: at least 4.5:1. */
-	float la = luminance(px_urgent) + 0.05f, ld = luminance(xc_urgent_dim) + 0.05f;
-	expect((la > ld ? la / ld : ld / la) >= 4.5f, "dim on amber is readable");
+	expect(xc_err == 0x8a0303, "the default look keeps its red");
+	/* Every text colour on the face it is drawn on, at least 4.5:1: all greys and
+	 * some hues, as background and as active colour. */
+	static const uint32_t hues[] = { 0x008080, 0x808000, 0x800000, 0x000080,
+		0x7387ad, 0xaeb2c3, 0x336699, 0xff0000, 0x00ff00, 0x0000ff };
+	int n_hues = sizeof hues / sizeof *hues, short_of = 0;
+	char what[160] = "";
+	for (int i = 0; i < 256 + n_hues; i++) {
+		uint32_t c = i < 256 ? (uint32_t)i * 0x010101 : hues[i - 256];
+		char hex[8];
+		snprintf(hex, sizeof hex, "#%06x", c);
+		setenv("MWC_INACTIVE", hex, 1);
+		setenv("MWC_ACTIVE", hex, 1);
+		theme_init();
+		const char *bad = contrast_ratio(px_bg, xc_fg) < 4.5f ? "text" :
+			contrast_ratio(px_bg, xc_dim) < 4.5f ? "dim text" :
+			contrast_ratio(px_bg, xc_err) < 4.5f ? "the error" :
+			contrast_ratio(px_sel, xc_sel_fg) < 4.5f ? "the current one" :
+			contrast_ratio(px_urgent, xc_urgent_fg) < 4.5f ? "attention" :
+			contrast_ratio(px_urgent, xc_urgent_dim) < 4.5f ? "dim attention" : NULL;
+		if (bad && !short_of++)
+			snprintf(what, sizeof what, ", first %s on %s", bad, hex);
+	}
+	unsetenv("MWC_INACTIVE");
+	unsetenv("MWC_ACTIVE");
+	char line[200];
+	snprintf(line, sizeof line, "every text has 4.5:1 on its face (%d short%s)",
+		short_of, what);
+	expect(!short_of, line);
 
 	/* Both sides of the 0x76 grey, and a dark theme from the environment. */
 	expect(contrast(0x777777) == 0x000000 && contrast(0x757575) == 0xffffff,

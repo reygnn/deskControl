@@ -268,16 +268,32 @@ static uint32_t contrast(uint32_t bg)
 	return (l + 0.05f) * (l + 0.05f) > 1.05f * 0.05f ? 0x000000 : 0xffffff;
 }
 
+static float contrast_ratio(uint32_t a, uint32_t b)
+{
+	float la = luminance(a) + 0.05f, lb = luminance(b) + 0.05f;
+	return la > lb ? la / lb : lb / la;
+}
+
 /* Dimmed towards fg, but no further than WCAG AA's 4.5:1 for small text allows; fg
  * itself if even that falls short. The same steps as digitalClock. */
 static uint32_t dimmed(uint32_t bg, uint32_t fg)
 {
-	float lb = luminance(bg) + 0.05f;
 	for (int k = 12; k < 20; k++) {
 		uint32_t c = mix(bg, fg, k / 20.0f);
-		float lc = luminance(c) + 0.05f;
-		if ((lb > lc ? lb / lc : lc / lb) >= 4.5f)
+		if (contrast_ratio(bg, c) >= 4.5f)
 			return c;
+	}
+	return fg;
+}
+
+/* c as it is if it has 4.5:1 on bg, else moved towards fg just as far as that
+ * needs; fg itself if even that falls short. The same as pulseControl. */
+static uint32_t readable(uint32_t bg, uint32_t c, uint32_t fg)
+{
+	for (int k = 0; k < 20; k++) {
+		uint32_t m = mix(c, fg, k / 20.0f);
+		if (contrast_ratio(bg, m) >= 4.5f)
+			return m;
 	}
 	return fg;
 }
@@ -428,8 +444,8 @@ static void theme_init(void)
 	/* mwc has no text colour for attention: black or white, dimmed on it. */
 	xc_urgent_fg = contrast(px_urgent);
 	xc_urgent_dim = dimmed(px_urgent, xc_urgent_fg);
-	/* readable on dark themes */
-	xc_err = contrast(bg) == 0xffffff ? 0xffa0a0 : 0x8a0303;
+	/* Light on dark themes; moved towards the text where a mid-tone needs it. */
+	xc_err = readable(bg, contrast(bg) == 0xffffff ? 0xffa0a0 : 0x8a0303, fg);
 
 	PangoContext *pctx = pango_font_map_create_context(
 		pango_cairo_font_map_get_default());

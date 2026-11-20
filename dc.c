@@ -81,6 +81,13 @@ static struct ws *all_ws[MAX_WS];       /* as they came, hidden ones too */
 static struct ws *wss[MAX_WS];  /* the shown ones, in the order of the buttons */
 static int n_all, n_ws, ws_seq;
 static int have_list;           /* the first done has come */
+
+/* Whether the compositor lets it be switched to: dimmed, passed over and not
+ * pressed where it doesn't. */
+static int can_activate(const struct ws *w)
+{
+	return w->caps & EXT_WORKSPACE_HANDLE_V1_WORKSPACE_CAPABILITIES_ACTIVATE;
+}
 static struct ws *armed;        /* the desktop the left button went down on */
 static int dirty = 1;
 
@@ -601,8 +608,7 @@ static void paint(void)
 		fill(face, w->r.x + BEV, w->r.y + BEV, w->r.w - 2 * BEV, w->r.h - 2 * BEV);
 		bevel(w->r, !down);
 		uint32_t ink = active ? xc_sel_fg : urgent ? xc_urgent_fg : xc_fg;
-		if (!(w->caps & EXT_WORKSPACE_HANDLE_V1_WORKSPACE_CAPABILITIES_ACTIVATE) &&
-		    !active)
+		if (!can_activate(w) && !active)
 			ink = urgent ? xc_urgent_dim : xc_dim; /* can't be switched to */
 		text_centred(ink, w->r, down ? 1 : 0, w->name);
 	}
@@ -661,11 +667,10 @@ static int read_only(void)
 	return n_ws == 1;
 }
 
-/* Whether the compositor lets button i be switched to. */
+/* Whether button i can be switched to: a single desktop is only shown. */
 static int switchable(int i)
 {
-	return i >= 0 && i < n_ws && !read_only() &&
-		(wss[i]->caps & EXT_WORKSPACE_HANDLE_V1_WORKSPACE_CAPABILITIES_ACTIVATE);
+	return i >= 0 && i < n_ws && !read_only() && can_activate(wss[i]);
 }
 
 static void activate(int i)

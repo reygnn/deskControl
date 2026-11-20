@@ -100,6 +100,7 @@ stays_at() { # description n
 		refresh
 		got=$(global desktop current)
 		[ "$got" = "$2" ] || fail "$1: desktop $got, expected $2"
+		[ "$(get deskControl visible)" = 1 ] || fail "$1: deskControl is not in sight"
 		sleep 0.05
 	done
 	echo "ok: $1"
@@ -171,7 +172,8 @@ do_input down left
 do_input move "$(cx 4)" $((Y0 + CH + 40))
 do_input up left
 stays_at "pressed and dragged off, nothing changes" 2
-# Dragged back onto it, the press counts again, as on a Motif push button.
+# Pressed on 3, dragged off and back onto it, the press counts again, as on a Motif
+# push button.
 do_input move "$(cx 3)" "$(cy 3)"
 do_input down left
 do_input move "$(cx 3)" $((Y0 + CH + 40))

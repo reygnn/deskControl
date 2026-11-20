@@ -4,7 +4,7 @@
 # It has its own sockets and touches no running session.
 #
 # Needs a built mwc with build/vinput, build/pngtool, build/workspacec and build/xdgc
-# in MWC_DIR (by default ../mwc), and grim. Output goes to
+# in MWC_DIR (by default ../mwc), grim and the Adwaita cursor theme. Output goes to
 # build/ui.log, deskControl's own to build/ui-deskControl.log, its protocol log to
 # build/ui-wayland.log.
 DC_DIR=$(cd "$(dirname "$0")/.." && pwd)
@@ -24,7 +24,15 @@ done
 
 export MWC_TEST_STATE=$SMOKE_DIR/state
 export LC_ALL=C.UTF-8
-unset MWC_INACTIVE MWC_ACTIVE
+unset MWC_INACTIVE MWC_ACTIVE XCURSOR_PATH
+# The cursor checks count on Adwaita's sizes; "default" is only Adwaita where the
+# system says so, so name it, and refuse to run without it.
+export XCURSOR_THEME=Adwaita
+for d in "$HOME/.local/share/icons" "$HOME/.icons" /usr/share/icons /usr/share/pixmaps; do
+	[ -d "$d/Adwaita/cursors" ] && break
+	d=
+done
+[ -n "$d" ] || { echo "FAIL: no Adwaita cursor theme (adwaita-icon-theme)"; exit 1; }
 # The font is fixed: the variable it once came from must change nothing.
 export DC_FONT="Sans 20"
 : >"$DC_LOG"

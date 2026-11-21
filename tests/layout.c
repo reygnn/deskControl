@@ -155,7 +155,7 @@ int main(void)
 		"a press on one that can't be switched to is not taken");
 
 	/* As in digitalClock, pixel for pixel; mix(bg, fg, 0.6) was 4.38:1. */
-	expect(xc_dim == 0x3d3e44, "dim on the default face: 3d3e44, at least 4.5:1");
+	expect(xc_dim == 0x3c3c3c, "dim on the default face: 3c3c3c, at least 4.5:1");
 
 	/* text_centred() puts the text at the left of a box maxw wide: a right-to-left
 	 * name must start there too, not at its right end. */
@@ -202,7 +202,7 @@ int main(void)
 		theme_init();
 		expect(xc_fg == 0x000000, "a too long last value counts as none, as in mwc");
 		expect(xc_sel_fg == 0x445566, "Mwm*activeForeground on the current one");
-		expect(theme.inactive.bg == 0xaeb2c3, "the tail of a too long line is no setting");
+		expect(theme.inactive.bg == 0xaaaaaa, "the tail of a too long line is no setting");
 		expect(theme.active.bg == 0x123456, "a long line is still a setting");
 		unlink(path);
 		snprintf(path, sizeof path, "%s/mwc", dir);
@@ -211,8 +211,9 @@ int main(void)
 	}
 	setenv("XDG_CONFIG_HOME", "/nonexistent", 1);
 	theme_init();
-	expect(xc_sel_fg == 0xffffff, "without it, white on the active colour, as Motif and mwc");
-	expect(xc_err == 0x8a0303, "the default look keeps its red");
+	expect(xc_sel_fg == 0x000000, "without it, black on mwc's light stone, as Motif picks");
+	/* #8a0303 has 4.31:1 on the grey: moved towards the text as far as 4.5:1 needs. */
+	expect(xc_err == 0x830303, "the default look's red reads");
 	/* The text as Motif picks it, as mwc's titles. What is made of it reads at least
 	 * as well: 4.5:1, or the text's own where that is less. Attention is a face of
 	 * deskControl's own, at 4.5:1. All greys and some hues, as background and as

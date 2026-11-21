@@ -74,7 +74,7 @@ let be switched to are dimmed, and the arrows, the wheel, Home and End pass over
 
 | Variable | Default | |
 |---|---|---|
-| `MWC_INACTIVE`, `MWC_ACTIVE` | `#aeb2c3`, `#7387ad` | background, current desktop and border with the keyboard |
+| `MWC_INACTIVE`, `MWC_ACTIVE` | `#aaaaaa`, `#c6c1aa` | background, current desktop and border with the keyboard |
 
 Without the variables it reads `Mwm*background` and `Mwm*activeBackground` from
 `~/.config/mwc/mwmrc`, else the Motif defaults. The labels take `Mwm*foreground` and

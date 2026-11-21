@@ -38,9 +38,9 @@ export DC_FONT="Sans 20"
 : >"$DC_LOG"
 SHOT=$SMOKE_DIR/ui.png
 ERR_SHOT=$DC_DIR/build/ui-last.png
-BG=aeb2c3      # Motif's default background, the buttons' face
-SEL=7387ad     # activeBackground: the current desktop
-URGENT=e7a53b  # the background mixed 70 % towards amber
+BG=aaaaaa      # mwc's default background, IRIX Base: the buttons' face
+SEL=c6c1aa     # activeBackground: the current desktop
+URGENT=e6a333  # the background mixed 70 % towards amber
 
 mkdir -p "$XDG_CONFIG_HOME/mwc"
 printf 'Mwm*deskControl*allDesktops: true\nMwm*deskControl*geometry: -0+0\n' \
@@ -139,8 +139,8 @@ frame_follows_focus
 face_is "desktop 1 is shown as the current one" 1 $SEL
 face_is "the others are not" 3 $BG
 
-# The label on the active colour, a mid-tone: white, as Motif picks it and mwc's titles
-# have it. Counted inside the bevel, whose light half is near white.
+# The label on the active colour, mwc's light stone: black, as Motif picks it and mwc's
+# titles have it. Counted inside the bevel, whose light half is near white.
 ink_is() { # description button rrggbb-wanted rrggbb-not
 	local yes= no= i
 	for ((i = 0; i < 30; i++)); do
@@ -156,7 +156,7 @@ ink_is() { # description button rrggbb-wanted rrggbb-not
 	cp "$SHOT" "$ERR_SHOT" 2>/dev/null
 	fail "$1: button $2 has $yes pixels near $3 and $no near $4 (screenshot in $ERR_SHOT)"
 }
-ink_is "the current desktop's label is white, as in mwc" 1 ffffff 000000
+ink_is "the current desktop's label is black, as in mwc" 1 000000 ffffff
 
 # ---- the mouse ----------------------------------------------------------------------
 

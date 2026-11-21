@@ -32,8 +32,10 @@ largest buffer scale that does divide it and is that much larger than elsewhere.
 ## Colours
 
 Without `Mwm*foreground` and `Mwm*activeForeground` the labels are black or white by
-Motif's rule, as mwc's titles. On a mid-tone that can fall short of WCAG's 4.5:1: on
-mwc's activeBackground `#7387ad` the current desktop's label is white at about 3.8:1.
+Motif's rule, as mwc's titles; on mwc's built-in grey black, as mwc has it. With mwc's
+default colours that reads well. A mid-tone set as a colour can fall short of WCAG's
+4.5:1: on Motif's old focused blue `#7387ad` the current desktop's label is white at
+about 3.6:1.
 Dimmed labels and the error are never harder to read than that. The amber of a
 desktop that wants attention is deskControl's own and keeps 4.5:1.
 

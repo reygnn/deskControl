@@ -473,7 +473,7 @@ static int button_at(int x, int y)
 
 static void key(struct mtk_window *w, const struct mtk_key *k, void *data)
 {
-	xkb_keysym_t ks = k->sym;
+	xkb_keysym_t ks = k->latin;    /* Q in a Russian layout too, as Qt reads it */
 	if (mtk_key_quits(ks, k->mods)) {
 		mtk_quit(m, 0);
 		return;

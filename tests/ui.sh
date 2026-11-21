@@ -474,6 +474,21 @@ check "a missing DejaVu Sans is reported" \
 kill "$PID_dc"
 wait "$PID_dc" 2>/dev/null
 
+# ---- a layout without Latin letters ------------------------------------------------
+# q and Ctrl+Q are the key that is Q in the first Latin layout, as Qt reads it.
+stop_vinput
+start_vinput 1280 720 ru,us
+for k in q ctrl+q; do
+	WAYLAND_DISPLAY=wayland-0 "$DC" >>"$DC_LOG" 2>&1 &
+	PID_dc=$!
+	check "deskControl is back" "[ -n \"\$(get deskControl x)\" ]"
+	do_input move "$(cx 1)" "$(cy 1)"
+	do_input click left
+	check "with the keyboard" "[ \"\$(get deskControl kbfocus)\" = 1 ]"
+	quits_with "$k"
+	check "deskControl is gone" "[ -z \"\$(get deskControl x)\" ]"
+done
+
 kill -0 "$pid" || fail "mwc died"
 stop_vinput
 stop_mwc

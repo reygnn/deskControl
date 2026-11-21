@@ -21,12 +21,23 @@ PROTO_C = build/ext-workspace-v1-protocol.c
 CFLAGS ?= -O2 -g
 DC_CFLAGS = $(MTK_CFLAGS) -Ibuild
 
-deskControl: dc.c version.h $(PROTO_H) $(PROTO_C) $(MTK_DEPS)
+deskControl: dc.c version.h build/gitversion.h $(PROTO_H) $(PROTO_C) $(MTK_DEPS)
 	$(CC) $(DC_CFLAGS) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ dc.c $(PROTO_C) \
 		$(MTK_SRC) $(MTK_LIBS) $(LDLIBS)
 
 build:
 	mkdir -p build
+
+# The commit a build is from, after the version: +DATE.TIME.HASH, its commit time in
+# UTC, and .dirty for changes not committed. Rewritten only when it changes, so
+# deskControl is linked again only then; empty without git.
+build/gitversion.h: FORCE | build
+	@v=$$(TZ=UTC0 git log -1 --format=%cd.%h --date=format-local:%Y%m%d.%H%M 2>/dev/null); \
+	if [ -n "$$v" ] && ! git diff --quiet HEAD 2>/dev/null; then v=$$v.dirty; fi; \
+	line="#define DESKCONTROL_GIT \"$${v:++$$v}\""; \
+	[ "$$(cat $@ 2>/dev/null)" = "$$line" ] || echo "$$line" >$@
+
+FORCE:
 
 build/ext-workspace-v1-client-protocol.h: $(EXT_WORKSPACE) | build
 	$(MTK_SCANNER) client-header $(EXT_WORKSPACE) $@
@@ -45,7 +56,7 @@ uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/deskControl \
 		$(DESTDIR)$(PREFIX)/share/applications/deskControl.desktop
 
-build/layout-test: tests/layout.c dc.c version.h $(PROTO_H) $(PROTO_C) $(MTK_DEPS)
+build/layout-test: tests/layout.c dc.c version.h build/gitversion.h $(PROTO_H) $(PROTO_C) $(MTK_DEPS)
 	$(CC) $(DC_CFLAGS) -I. $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ tests/layout.c \
 		$(PROTO_C) $(MTK_SRC) $(MTK_LIBS) $(LDLIBS)
 
@@ -60,4 +71,4 @@ test: deskControl layout-test
 clean:
 	rm -rf deskControl build
 
-.PHONY: all install uninstall layout-test test clean
+.PHONY: all install uninstall layout-test test clean FORCE

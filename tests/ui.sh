@@ -440,8 +440,15 @@ check "the theme for scale 2 is let go of" "[ \"\$(gone)\" -gt $GONE ]"
 echo "ok: with the pointer off it, the surface drops its buffer before the theme goes"
 kill "$PID_dc"
 wait "$PID_dc" 2>/dev/null
-[ "$("$DC" -v)" = "deskControl $(sed -n 's/^#define DESKCONTROL_VERSION "\(.*\)"/\1/p' "$DC_DIR/version.h")" ] ||
-	fail "-v: $("$DC" -v)"
+# The version from version.h, then the commit the build is from where git knows it.
+want=$(sed -n 's/^#define DESKCONTROL_VERSION "\([^"]*\)".*/\1/p' "$DC_DIR/version.h")
+if commit=$(TZ=UTC0 git -C "$DC_DIR" log -1 --format=%cd.%h \
+		--date=format-local:%Y%m%d.%H%M 2>/dev/null); then
+	git -C "$DC_DIR" diff --quiet HEAD || commit=$commit.dirty
+	want=$want+$commit
+fi
+[ "$("$DC" -v)" = "deskControl $want" ] ||
+	fail "-v: $("$DC" -v), not deskControl $want"
 echo "ok: -v prints the version"
 "$DC" -h 2>/dev/null | grep -q '^usage: deskControl' || fail "-h: no usage on stdout"
 "$DC" -h >/dev/null 2>/dev/null || fail "-h: exit $?"

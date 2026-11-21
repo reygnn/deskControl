@@ -40,7 +40,9 @@ desktop and would be gone after the first switch; there it needs
 
 the second line puts it in the top right corner.
 
-`-v` prints the version, which is set in `version.h`.
+`-v` prints the version, which is set in `version.h`,
+and the commit built, as `VERSION+DATE.TIME.HASH` with its commit time in UTC
+and `.dirty` for changes not committed.
 
 
 ## Look

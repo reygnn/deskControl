@@ -29,6 +29,15 @@ a viewport shows it at its size over the scale. Without wp_viewporter it gets th
 largest buffer scale that does divide it and is that much larger than elsewhere.
 
 
+## Colours
+
+Without `Mwm*foreground` and `Mwm*activeForeground` the labels are black or white by
+Motif's rule, as mwc's titles. On a mid-tone that can fall short of WCAG's 4.5:1: on
+mwc's activeBackground `#7387ad` the current desktop's label is white at about 3.8:1.
+Dimmed labels and the error are never harder to read than that. The amber of a
+desktop that wants attention is deskControl's own and keeps 4.5:1.
+
+
 ## Tests
 
 mwc has four desktops, so `tests/ui.sh` sees only 1 2 over 3 4. Other numbers are

@@ -2,56 +2,37 @@
 
 PREFIX ?= /usr/local
 PKG_CONFIG ?= pkg-config
-PKGS = wayland-client wayland-cursor xkbcommon cairo pangocairo
+MTK_DIR = mtk
 
-WAYLAND_PROTOCOLS := $(shell $(PKG_CONFIG) --variable=pkgdatadir wayland-protocols)
-ifeq ($(WAYLAND_PROTOCOLS)$(filter clean uninstall,$(MAKECMDGOALS)),)
+all: deskControl
+
+include $(MTK_DIR)/mtk.mk
+
+ifeq ($(MTK_PROTOCOLS)$(filter clean uninstall,$(MAKECMDGOALS)),)
 $(error wayland-protocols 1.40 or later is needed (pkg-config finds none))
 endif
-WAYLAND_SCANNER := $(shell $(PKG_CONFIG) --variable=wayland_scanner wayland-scanner)
-XDG_SHELL = $(WAYLAND_PROTOCOLS)/stable/xdg-shell/xdg-shell.xml
-VIEWPORTER = $(WAYLAND_PROTOCOLS)/stable/viewporter/viewporter.xml
 # In wayland-protocols from 1.40 on.
-EXT_WORKSPACE = $(WAYLAND_PROTOCOLS)/staging/ext-workspace/ext-workspace-v1.xml
-
-PROTO_H = build/xdg-shell-client-protocol.h build/ext-workspace-v1-client-protocol.h \
-	build/viewporter-client-protocol.h
-PROTO_C = build/xdg-shell-protocol.c build/ext-workspace-v1-protocol.c \
-	build/viewporter-protocol.c
+EXT_WORKSPACE = $(MTK_PROTOCOLS)/staging/ext-workspace/ext-workspace-v1.xml
+PROTO_H = build/ext-workspace-v1-client-protocol.h
+PROTO_C = build/ext-workspace-v1-protocol.c
 
 # CPPFLAGS, CFLAGS, LDFLAGS and LDLIBS stay the user's, also on the command line:
 # `make CFLAGS=-O0` must not lose the include paths.
 CFLAGS ?= -O2 -g
-DC_CFLAGS = -std=c11 -Wall -Wextra -Wno-unused-parameter -Ibuild \
-	$(shell $(PKG_CONFIG) --cflags $(PKGS))
-DC_LIBS = $(shell $(PKG_CONFIG) --libs $(PKGS)) -lm
+DC_CFLAGS = $(MTK_CFLAGS) -Ibuild
 
-all: deskControl
-
-deskControl: dc.c version.h $(PROTO_H) $(PROTO_C)
+deskControl: dc.c version.h $(PROTO_H) $(PROTO_C) $(MTK_DEPS)
 	$(CC) $(DC_CFLAGS) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ dc.c $(PROTO_C) \
-		$(DC_LIBS) $(LDLIBS)
+		$(MTK_SRC) $(MTK_LIBS) $(LDLIBS)
 
 build:
 	mkdir -p build
 
-build/xdg-shell-client-protocol.h: $(XDG_SHELL) | build
-	$(WAYLAND_SCANNER) client-header $(XDG_SHELL) $@
-
-build/xdg-shell-protocol.c: $(XDG_SHELL) | build
-	$(WAYLAND_SCANNER) private-code $(XDG_SHELL) $@
-
 build/ext-workspace-v1-client-protocol.h: $(EXT_WORKSPACE) | build
-	$(WAYLAND_SCANNER) client-header $(EXT_WORKSPACE) $@
+	$(MTK_SCANNER) client-header $(EXT_WORKSPACE) $@
 
 build/ext-workspace-v1-protocol.c: $(EXT_WORKSPACE) | build
-	$(WAYLAND_SCANNER) private-code $(EXT_WORKSPACE) $@
-
-build/viewporter-client-protocol.h: $(VIEWPORTER) | build
-	$(WAYLAND_SCANNER) client-header $(VIEWPORTER) $@
-
-build/viewporter-protocol.c: $(VIEWPORTER) | build
-	$(WAYLAND_SCANNER) private-code $(VIEWPORTER) $@
+	$(MTK_SCANNER) private-code $(EXT_WORKSPACE) $@
 
 install: deskControl
 	install -Dm755 deskControl $(DESTDIR)$(PREFIX)/bin/deskControl
@@ -64,9 +45,9 @@ uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/deskControl \
 		$(DESTDIR)$(PREFIX)/share/applications/deskControl.desktop
 
-build/layout-test: tests/layout.c dc.c version.h $(PROTO_H) $(PROTO_C)
+build/layout-test: tests/layout.c dc.c version.h $(PROTO_H) $(PROTO_C) $(MTK_DEPS)
 	$(CC) $(DC_CFLAGS) -I. $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ tests/layout.c \
-		$(PROTO_C) $(DC_LIBS) $(LDLIBS)
+		$(PROTO_C) $(MTK_SRC) $(MTK_LIBS) $(LDLIBS)
 
 # The layout alone, without a compositor.
 layout-test: build/layout-test

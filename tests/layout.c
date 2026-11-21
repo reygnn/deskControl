@@ -7,7 +7,6 @@
 #include "../dc.c"
 #undef main
 #include <sys/stat.h>
-#include <sys/wait.h>
 
 static int failed;
 
@@ -46,11 +45,9 @@ static int in_row(int y)
 /* The button pressed at x, y, or -1; the press stays held. */
 static int left_down(int x, int y)
 {
-	static int surf;
-	ptr_surface = (struct wl_surface *)&surf; /* only compared to NULL */
-	ptr_x = x;
-	ptr_y = y;
-	ptr_button(NULL, NULL, 0, 0, BTN_LEFT, WL_POINTER_BUTTON_STATE_PRESSED);
+	pointer(NULL, &(struct mtk_pointer){ .kind = MTK_ENTER, .x = x, .y = y }, NULL);
+	pointer(NULL, &(struct mtk_pointer){ .kind = MTK_PRESS, .x = x, .y = y,
+		.button = BTN_LEFT }, NULL);
 	for (int i = 0; i < n_ws; i++)
 		if (wss[i] == armed)
 			return i;
@@ -62,12 +59,6 @@ static int left_click(int x, int y)
 	int was = left_down(x, y);
 	armed = NULL;
 	return was;
-}
-
-static int rgb(const char *s)
-{
-	uint32_t c;
-	return parse_color(s, &c) ? (int)c : -1;
 }
 
 int main(void)
@@ -163,16 +154,8 @@ int main(void)
 	expect(left_click(r.x + r.w / 2, r.y + r.h / 2) == -1,
 		"a press on one that can't be switched to is not taken");
 
-	expect(rgb("rgb:ff/80/0") == 0xff8000, "rgb:ff/80/0");
-	expect(rgb("rgb:ffff/0/0") == 0xff0000, "rgb: 4 digits");
-	expect(rgb("rgb: ff/00/00") == -1, "rgb: a space is refused, as in mwc");
-	expect(rgb("rgb:-1/0/0") == -1, "rgb: a sign is refused");
-	expect(rgb("rgb:0x1/0/0") == -1, "rgb: 0x is refused");
-	expect(rgb("rgb:ff/00/00/") == -1, "rgb: a trailing / is refused");
-
-	/* As in digitalClock, pixel for pixel; mix(bg, fg, 0.6) was 4.38:1 and 3.35:1. */
+	/* As in digitalClock, pixel for pixel; mix(bg, fg, 0.6) was 4.38:1. */
 	expect(xc_dim == 0x3d3e44, "dim on the default face: 3d3e44, at least 4.5:1");
-	expect(dimmed(0x7387ad, contrast(0x7387ad)) == 0x171b23, "dim on 7387ad: 171b23");
 
 	/* text_centred() puts the text at the left of a box maxw wide: a right-to-left
 	 * name must start there too, not at its right end. */
@@ -188,10 +171,6 @@ int main(void)
 		snprintf(what, sizeof what, "name %d starts at the left of its box (%d)", i, log.x);
 		expect(log.x == 0, what);
 	}
-
-	/* Too old to bind: nothing is asked of the (absent) registry. */
-	registry_global(NULL, NULL, 1, wl_compositor_interface.name, 3);
-	expect(!compositor, "wl_compositor 3 is not taken");
 
 	/* 31 two-byte characters fill 62 of the 63 bytes; the 32nd does not fit whole. */
 	char longname[80] = "";
@@ -223,8 +202,8 @@ int main(void)
 		theme_init();
 		expect(xc_fg == 0x000000, "a too long last value counts as none, as in mwc");
 		expect(xc_sel_fg == 0x445566, "Mwm*activeForeground on the current one");
-		expect(px_bg == 0xaeb2c3, "the tail of a too long line is no setting");
-		expect(px_sel == 0x123456, "a long line is still a setting");
+		expect(theme.inactive.bg == 0xaeb2c3, "the tail of a too long line is no setting");
+		expect(theme.active.bg == 0x123456, "a long line is still a setting");
 		unlink(path);
 		snprintf(path, sizeof path, "%s/mwc", dir);
 		rmdir(path);
@@ -232,10 +211,12 @@ int main(void)
 	}
 	setenv("XDG_CONFIG_HOME", "/nonexistent", 1);
 	theme_init();
-	expect(xc_sel_fg == 0x000000, "without it, black on the active colour");
+	expect(xc_sel_fg == 0xffffff, "without it, white on the active colour, as Motif and mwc");
 	expect(xc_err == 0x8a0303, "the default look keeps its red");
-	/* Every text colour on the face it is drawn on, at least 4.5:1: all greys and
-	 * some hues, as background and as active colour. */
+	/* The text as Motif picks it, as mwc's titles. What is made of it reads at least
+	 * as well: 4.5:1, or the text's own where that is less. Attention is a face of
+	 * deskControl's own, at 4.5:1. All greys and some hues, as background and as
+	 * active colour. */
 	static const uint32_t hues[] = { 0x008080, 0x808000, 0x800000, 0x000080,
 		0x7387ad, 0xaeb2c3, 0x336699, 0xff0000, 0x00ff00, 0x0000ff };
 	int n_hues = sizeof hues / sizeof *hues, short_of = 0;
@@ -247,69 +228,33 @@ int main(void)
 		setenv("MWC_INACTIVE", hex, 1);
 		setenv("MWC_ACTIVE", hex, 1);
 		theme_init();
-		const char *bad = contrast_ratio(px_bg, xc_fg) < 4.5f ? "text" :
-			contrast_ratio(px_bg, xc_dim) < 4.5f ? "dim text" :
-			contrast_ratio(px_bg, xc_err) < 4.5f ? "the error" :
-			contrast_ratio(px_sel, xc_sel_fg) < 4.5f ? "the current one" :
-			contrast_ratio(px_urgent, xc_urgent_fg) < 4.5f ? "attention" :
-			contrast_ratio(px_urgent, xc_urgent_dim) < 4.5f ? "dim attention" : NULL;
+		uint32_t bg = theme.inactive.bg;
+		float need = MIN(4.5f, mtk_contrast_ratio(bg, xc_fg));
+		const char *bad = xc_fg != mtk_text_color(bg) ? "text" :
+			xc_sel_fg != mtk_text_color(theme.active.bg) ? "the current one" :
+			mtk_contrast_ratio(bg, xc_dim) < need ? "dim text" :
+			mtk_contrast_ratio(bg, xc_err) < need ? "the error" :
+			mtk_contrast_ratio(px_urgent, xc_urgent_fg) < 4.5f ? "attention" :
+			mtk_contrast_ratio(px_urgent, xc_urgent_dim) < 4.5f ? "dim attention" :
+			NULL;
 		if (bad && !short_of++)
 			snprintf(what, sizeof what, ", first %s on %s", bad, hex);
 	}
 	unsetenv("MWC_INACTIVE");
 	unsetenv("MWC_ACTIVE");
 	char line[200];
-	snprintf(line, sizeof line, "every text has 4.5:1 on its face (%d short%s)",
+	snprintf(line, sizeof line, "every text as Motif has it, or readable (%d short%s)",
 		short_of, what);
 	expect(!short_of, line);
 
-	/* Both sides of the 0x76 grey, and a dark theme from the environment. */
-	expect(contrast(0x777777) == 0x000000 && contrast(0x757575) == 0xffffff,
-		"black from 0x77 up, white from 0x75 down");
 	setenv("MWC_INACTIVE", "#303030", 1);
 	setenv("MWC_ACTIVE", "rgb:a/b/c", 1);
 	theme_init();
-	expect(px_bg == 0x303030 && xc_fg == 0xffffff, "MWC_INACTIVE: dark, white text");
-	expect(px_sel == 0xaabbcc, "MWC_ACTIVE, rgb: with one digit");
+	expect(theme.inactive.bg == 0x303030 && xc_fg == 0xffffff,
+		"MWC_INACTIVE: dark, white text");
+	expect(theme.active.bg == 0xaabbcc, "MWC_ACTIVE, rgb: with one digit");
 	unsetenv("MWC_INACTIVE");
 	unsetenv("MWC_ACTIVE");
-
-	unsetenv("XCURSOR_SIZE");
-	expect(cursor_size() == 24, "XCURSOR_SIZE unset: 24");
-	setenv("XCURSOR_SIZE", "1000000000", 1);
-	expect(cursor_size() == 256, "XCURSOR_SIZE huge: 256, no overflow with the scale");
-	setenv("XCURSOR_SIZE", "32x", 1);
-	expect(cursor_size() == 24, "XCURSOR_SIZE not a number: 24");
-	unsetenv("XCURSOR_SIZE");
-
-	/* At most 16: the window's and the cursor's sizes times it stay in an int. */
-	expect(buffer_scale(0) == 0 && buffer_scale(-3) == 0, "a scale below 1 is ignored");
-	expect(buffer_scale(1) == 1 && buffer_scale(16) == 16, "scales 1 to 16 are kept");
-	expect(buffer_scale(17) == 16 && buffer_scale(INT32_MAX) == 16, "larger ones are 16");
-
-	/* Headless mwc has one seat: the list alone, not the binding. */
-	struct seats l = { 0 };
-	uint32_t name, ver;
-	expect(!seats_next(&l, &name, &ver), "no seat: none to take");
-	seats_add(&l, 10, 7);
-	seats_add(&l, 11, 5);
-	seats_add(&l, 12, 9);
-	expect(seats_next(&l, &name, &ver) && name == 10 && ver == 7, "the oldest seat first");
-	seats_remove(&l, 99);
-	expect(l.n == 3, "another global going leaves the seats");
-	seats_remove(&l, 10);
-	expect(seats_next(&l, &name, &ver) && name == 11 && ver == 5,
-		"the first one gone: the next oldest");
-	seats_remove(&l, 12);
-	expect(seats_next(&l, &name, &ver) && name == 11 && l.n == 1, "one from the end goes");
-	seats_remove(&l, 11);
-	expect(!seats_next(&l, &name, &ver), "all gone: none to take");
-	for (uint32_t i = 0; i < MAX_SEATS; i++)
-		seats_add(&l, 20 + i, 1);
-	expect(!seats_add(&l, 99, 1) && l.n == MAX_SEATS, "a full list keeps no more");
-	seats_remove(&l, 20);
-	expect(seats_add(&l, 99, 1) && l.name[MAX_SEATS - 1] == 99,
-		"one gone: room for the next, at the end");
 
 	/* Without a button the placeholder spans the inside, and text_centred() cuts
 	 * what is wider than that: the window must be wide enough for all of it. */
@@ -325,26 +270,6 @@ int main(void)
 		expect(textw(placeholder()) <= maxw, what);
 	}
 	expect(!strcmp(placeholder(), "no desktops"), "with the list: no desktops");
-
-	/* A failed poll() records nothing in libwayland: its own errno is the cause. */
-	int fds[2];
-	fflush(stdout);         /* the child's exit() must not write it again */
-	if (pipe(fds) == 0) {
-		pid_t pid = fork();
-		if (pid == 0) {
-			dup2(fds[1], 2);
-			lost_connection_err(ENOMEM);
-		}
-		close(fds[1]);
-		char out[200] = "";
-		ssize_t got = read(fds[0], out, sizeof out - 1);
-		out[got > 0 ? got : 0] = 0;
-		close(fds[0]);
-		int st = 0;
-		waitpid(pid, &st, 0);
-		expect(WIFEXITED(st) && WEXITSTATUS(st) == 1 &&
-			strstr(out, strerror(ENOMEM)), "a failed poll() names its own cause");
-	}
 
 	puts(failed ? "FAIL: layout" : "PASS: layout");
 	return failed;

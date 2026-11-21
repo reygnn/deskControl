@@ -4,8 +4,9 @@ deskControl switches virtual desktops, with one button per desktop in the look o
 Motif window manager. It is made for the dock of [mwc](https://github.com/reygnn/mwc),
 beside [pulseControl](https://github.com/reygnn/pulseControl) and
 [digitalClock](https://github.com/reygnn/digitalClock), and runs on any Wayland
-compositor with xdg-shell and ext-workspace-v1. One C file on libwayland, xkbcommon,
-Cairo and Pango, no toolkit.
+compositor with xdg-shell and ext-workspace-v1. One C file on
+[mtk](https://github.com/reygnn/mtk), the toolkit of mwc's clients, vendored in `mtk/`:
+libwayland, xkbcommon, Cairo and Pango.
 
 
 ## Build
@@ -77,7 +78,7 @@ let be switched to are dimmed, and the arrows, the wheel, Home and End pass over
 
 Without the variables it reads `Mwm*background` and `Mwm*activeBackground` from
 `~/.config/mwc/mwmrc`, else the Motif defaults. The labels take `Mwm*foreground` and
-`Mwm*activeForeground` from there, else black or white, whichever reads better.
+`Mwm*activeForeground` from there, else black or white as Motif picks it, as mwc does.
 
 The font is fixed as DejaVu Sans 10, the same in deskControl, pulseControl, osDisplay
 and digitalClock, so the four are as high as each other in the dock. Without it

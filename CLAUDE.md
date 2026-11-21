@@ -22,7 +22,8 @@ To check that a test fails without a fix, build the old `dc.c` elsewhere and run
 
 ## Rules
 
-- One C file, `dc.c`, no toolkit. The look follows mwc: colours from `MWC_INACTIVE`,
-  `MWC_ACTIVE` or mwc's mwmrc, the bevel rules of mwc's `draw.c`.
+- One C file, `dc.c`, on mtk in `mtk/`, vendored with git subtree: changed in mtk's
+  repository and taken with `git subtree pull --prefix=mtk`, never edited here. The
+  look follows mwc through mtk: its colours, Motif's shadows and text colour.
 - A test client deskControl needs belongs in mwc's `tests/`, not here.
 - C lines at most 100 columns, tabs as 8, as in mwc.

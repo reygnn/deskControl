@@ -212,10 +212,11 @@ int main(void)
 	setenv("XDG_CONFIG_HOME", "/nonexistent", 1);
 	theme_init();
 	expect(xc_sel_fg == 0x000000, "without it, black on mwc's light stone, as Motif picks");
-	/* #8a0303 has 4.31:1 on the grey: moved towards the text as far as 4.5:1 needs. */
+	/* #8a0303 has 4.31:1 on the grey: moved towards black as far as 4.5:1 needs. */
 	expect(xc_err == 0x830303, "the default look's red reads");
-	/* The text as Motif picks it, as mwc's titles. What is made of it reads at least
-	 * as well: 4.5:1, or the text's own where that is less. Attention is a face of
+	/* The text as Motif picks it, as mwc's titles. The dimmed text reads at least as
+	 * well: 4.5:1, or the text's own where that is less; the error at 4.5:1 whatever
+	 * the text has. Attention is a face of
 	 * deskControl's own, at 4.5:1. All greys and some hues, as background and as
 	 * active colour. */
 	static const uint32_t hues[] = { 0x008080, 0x808000, 0x800000, 0x000080,
@@ -234,7 +235,7 @@ int main(void)
 		const char *bad = xc_fg != mtk_text_color(bg) ? "text" :
 			xc_sel_fg != mtk_text_color(theme.active.bg) ? "the current one" :
 			mtk_contrast_ratio(bg, xc_dim) < need ? "dim text" :
-			mtk_contrast_ratio(bg, xc_err) < need ? "the error" :
+			mtk_contrast_ratio(bg, xc_err) < 4.5f ? "the error" :
 			mtk_contrast_ratio(px_urgent, xc_urgent_fg) < 4.5f ? "attention" :
 			mtk_contrast_ratio(px_urgent, xc_urgent_dim) < 4.5f ? "dim attention" :
 			NULL;

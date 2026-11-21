@@ -107,15 +107,14 @@ static void theme_init(void)
 	/* Text as mwc's titles: the resource if set, else as Motif picks it. */
 	xc_fg = theme.inactive.fg;
 	xc_sel_fg = theme.active.fg;
-	xc_dim = mtk_dimmed(bg, xc_fg);
+	xc_dim = theme.dim;
 	/* Attention: amber, as far from both of them as it gets. mwc has no such face
 	 * and no text colour for it: black or white by WCAG, dimmed on it. */
 	px_urgent = mtk_mix(bg, 0xffa000, 0.7f);
 	xc_urgent_fg = mtk_best_contrast(px_urgent);
 	xc_urgent_dim = mtk_dimmed(px_urgent, xc_urgent_fg);
-	/* Light on dark themes; moved towards the text where a mid-tone needs it. */
-	xc_err = mtk_readable(bg, mtk_best_contrast(bg) == 0xffffff ? 0xffa0a0 : 0x8a0303,
-		xc_fg);
+	/* mtk's, as for all mwc's clients: a red at 4.5:1 on any bg. */
+	xc_err = theme.err;
 
 	if (plo)
 		g_object_unref(plo);
